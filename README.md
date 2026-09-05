@@ -22,11 +22,11 @@ docker compose up -d --build
 Vérifier que le conteneur répond :
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8474/health
 # {"status":"ok","name":"Larbinus","version":"0.1.0","providers":["ollama"]}
 ```
 
-Documentation interactive de l'API : http://localhost:8080/docs
+Documentation interactive de l'API : http://localhost:8474/docs
 
 ## Configuration
 
@@ -36,7 +36,7 @@ Le conteneur démarre et fonctionne même avec un seul fournisseur configuré.
 
 | Variable | Rôle |
 |---|---|
-| `LARBINUS_PORT` | Port publié sur le LAN (le port interne reste `8080`) |
+| `LARBINUS_PORT` | Port publié sur le LAN, `8474` par défaut (le port interne du conteneur reste `8080`) |
 | `LARBINUS_API_KEY` | Si renseignée, exige `X-API-Key` ou `Authorization: Bearer` |
 | `OLLAMA_BASE_URL` | Ex. `http://192.168.0.50:11434` |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | OpenAI et toute API compatible |
@@ -63,7 +63,7 @@ mkdir -p data && sudo chown -R 1000:1000 data
 
 docker compose up -d --build
 docker compose logs -f larbinus
-curl http://localhost:8080/health
+curl http://localhost:8474/health
 ```
 
 Mise à jour ultérieure :

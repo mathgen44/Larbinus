@@ -8,7 +8,7 @@
 |---|---|
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
-| **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8080` |
+| **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
 | **Phase en cours** | Phase 1 — Socle conteneur (à valider par `docker compose up -d`) |
 | **Dernière mise à jour** | 2026-09-05 |
 
@@ -29,6 +29,7 @@ correction. Toute décision d'architecture qui change le cap va dans le § 8.
 | Déploiement | Image unique, `docker compose up -d`, config par `.env` | 2026-09-05 |
 | API compatible OpenAI | **Oui** — `/v1/chat/completions` et `/v1/models` en plus de l'API native | 2026-09-05 |
 | Licence | MIT | 2026-09-05 |
+| Port publié | `8474` par défaut (8080 occupé par SearXNG sur la machine cible) | 2026-09-05 |
 
 **Pourquoi Python/FastAPI** : écosystème IA le plus riche (SDK officiels des quatre
 fournisseurs, briques RAG matures), streaming SSE natif et simple, image finale légère
@@ -256,3 +257,4 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Alias `host.docker.internal` déclaré dans le compose | Permet d'atteindre un Ollama installé sur l'hôte sans mode `network_host` |
 | 2026-09-05 | Licence MIT, détenteur `mathgen44` | Projet ouvert et réutilisable ; le dépôt n'utilise que le pseudo, jamais le nom civil |
 | 2026-09-05 | Aucune adresse d'Ollama codée en dur, uniquement des exemples commentés dans `.env.example` | Le projet doit rester déployable par d'autres utilisateurs avec leur propre infrastructure |
+| 2026-09-05 | Port publié par défaut : 8080 → **8474** | 8080 déjà pris par SearXNG sur 192.168.0.40 ; 8474 est hors des plages encombrées et sous la plage éphémère du noyau (32768+). Le port interne du conteneur reste 8080, seul le mapping change |

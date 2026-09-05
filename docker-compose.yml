@@ -8,7 +8,7 @@ services:
       - .env
     ports:
       # LARBINUS_PORT = port publié sur le LAN ; 8080 = port interne, fixe.
-      - "${LARBINUS_PORT:-8080}:8080"
+      - "${LARBINUS_PORT:-8474}:8080"
     volumes:
       - ./data:/data
     extra_hosts:
