@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 1 — Socle conteneur (à valider par `docker compose up -d`) |
+| **Phase en cours** | Phase 2 — Couche fournisseurs (terminée, à valider en réel) → Phase 3 |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -110,7 +110,7 @@ Larbinus/
 - [x] Rédiger le `README.md` (démarrage rapide, configuration, développement local)
 - [x] Choisir la licence : **MIT**, fichier `LICENSE` ajouté
 
-### Phase 1 — Socle conteneur ⏳ *en cours*
+### Phase 1 — Socle conteneur ✅ *terminée*
 
 - [x] `requirements.txt` (fastapi, uvicorn, httpx, pydantic-settings) + `requirements-dev.txt`
 - [x] `app/config.py` : lecture des variables d'environnement, aucun secret en dur ;
@@ -124,16 +124,25 @@ Larbinus/
 - [x] `tests/test_health.py` — 3 tests de fumée, tous au vert
 - [ ] **Vérification** : `docker compose up -d --build` puis `/health` répond depuis le LAN
 
-### Phase 2 — Couche fournisseurs
+### Phase 2 — Couche fournisseurs ✅ *terminée (validée par tests, reste à confirmer en réel)*
 
-- [ ] `providers/base.py` : interface commune + normalisation des erreurs
-- [ ] `providers/registry.py` : n'active un fournisseur que si sa clé/URL est renseignée
-- [ ] Implémenter `ollama` (streaming NDJSON, liste des modèles via `/api/tags`)
-- [ ] Implémenter `openai_compat` (base_url configurable → OpenAI, OpenRouter, vLLM, LM Studio)
-- [ ] Implémenter `anthropic`
-- [ ] Implémenter `mistral`
-- [ ] Gestion des timeouts, des retries et du repli si un fournisseur est injoignable
-- [ ] **Vérification** : `GET /api/models` agrège les modèles des fournisseurs configurés
+- [x] `app/schemas.py` : `ChatMessage`, `ChatRequest`, `ModelInfo`, `ProviderStatus`
+- [x] `providers/base.py` : interface `ChatProvider` + erreurs normalisées
+      (`ProviderUnavailable` 503, `ProviderAuthError` 401, `ModelNotFound` 404,
+      `ProviderNotConfigured` 400) + `ChatChunk`
+- [x] `providers/registry.py` : n'instancie un fournisseur que si sa clé/URL est renseignée ;
+      résolution `fournisseur/modèle` avec repli sur `DEFAULT_PROVIDER` puis sur le
+      fournisseur unique ; agrégation tolérante aux pannes
+- [x] Implémenter `ollama` (streaming NDJSON, modèles via `/api/tags`)
+- [x] Implémenter `openai_compat` (base_url configurable → OpenAI, OpenRouter, vLLM, LM Studio)
+- [x] Implémenter `anthropic` (`/v1/messages`, prompt système séparé, SSE typé)
+- [x] Implémenter `mistral` (sous-classe d'`openai_compat`)
+- [x] Timeouts distincts connexion/lecture ; un fournisseur injoignable est ignoré
+      dans `/api/models` au lieu de faire échouer l'appel
+- [x] `GET /api/models` (agrégation) et `GET /api/providers` (diagnostic par fournisseur)
+- [x] 17 tests au vert, transport HTTP simulé, aucun appel réseau
+- [ ] **Vérification en réel** : `GET /api/models` renvoie bien les modèles de
+      l'instance Ollama une fois le conteneur déployé
 
 ### Phase 3 — API de chat
 
@@ -258,3 +267,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Licence MIT, détenteur `mathgen44` | Projet ouvert et réutilisable ; le dépôt n'utilise que le pseudo, jamais le nom civil |
 | 2026-09-05 | Aucune adresse d'Ollama codée en dur, uniquement des exemples commentés dans `.env.example` | Le projet doit rester déployable par d'autres utilisateurs avec leur propre infrastructure |
 | 2026-09-05 | Port publié par défaut : 8080 → **8474** | 8080 déjà pris par SearXNG sur 192.168.0.40 ; 8474 est hors des plages encombrées et sous la plage éphémère du noyau (32768+). Le port interne du conteneur reste 8080, seul le mapping change |
+| 2026-09-05 | Mistral implémenté comme sous-classe d'`OpenAICompatibleProvider` | Son API reprend le contrat OpenAI : une seule implémentation à maintenir |
+| 2026-09-05 | `/health` ne contacte aucun fournisseur | Une API externe en panne ferait redémarrer le conteneur en boucle via le `HEALTHCHECK` ; le diagnostic des fournisseurs vit dans `/api/providers` |
+| 2026-09-05 | `request.system` l'emporte sur un message de rôle `system` dans l'historique | Évite qu'un persona (phase 6) soit écrasé silencieusement par un historique importé |
+| 2026-09-05 | Le préfixe n'est retiré que s'il correspond au fournisseur | Sinon `openai/mistralai/Mistral-7B` (OpenRouter) serait tronqué |

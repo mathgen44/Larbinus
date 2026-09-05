@@ -26,6 +26,20 @@ curl http://localhost:8474/health
 # {"status":"ok","name":"Larbinus","version":"0.1.0","providers":["ollama"]}
 ```
 
+Lister les modèles de tous les fournisseurs configurés :
+
+```bash
+curl http://localhost:8474/api/models
+# [{"id":"ollama/mistral","name":"mistral","provider":"ollama","context_length":null}]
+```
+
+Diagnostiquer un fournisseur qui ne répond pas :
+
+```bash
+curl http://localhost:8474/api/providers
+# [{"name":"ollama","available":false,"detail":"injoignable à l'adresse …","model_count":null}]
+```
+
 Documentation interactive de l'API : http://localhost:8474/docs
 
 ## Configuration
