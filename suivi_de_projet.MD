@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 4 — Interface web (phases 1 à 3 validées en production) |
+| **Phase en cours** | Phase 4 terminée (à valider en réel) → Phase 5 |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -175,16 +175,29 @@ Larbinus/
       réponse en flux, événement `done` avec compteurs de jetons et `duration_ms`
 - [ ] **Vérification en réel** : les trois fournisseurs en ligne (clés non encore renseignées)
 
-### Phase 4 — Interface web
+### Phase 4 — Interface web ✅ *terminée (validée au navigateur, reste à confirmer en réel)*
 
-- [ ] Page de chat statique, sans étape de build (HTML + JS vanilla)
-- [ ] Sélecteur fournisseur/modèle alimenté par `/api/models`
-- [ ] Rendu Markdown + blocs de code avec bouton copier
-- [ ] Bloc « Raisonnement » repliable, replié par défaut, alimenté par l'événement SSE
-      `reasoning` (indispensable pour `deepseek-r1:8b`)
-- [ ] Thème clair/sombre, mise en page responsive (utilisable au téléphone)
-- [ ] Indicateur de streaming et bouton « stop »
-- [ ] **Vérification** : conversation complète de bout en bout dans le navigateur
+- [x] Page de chat statique, sans étape de build ni dépendance externe
+      (`app/static/{index.html,styles.css,app.js}`), servie à la racine
+- [x] Sélecteur fournisseur/modèle alimenté par `/api/models`, groupé par fournisseur,
+      dernier modèle choisi mémorisé
+- [x] Rendu Markdown écrit à la main : titres, listes, citations, liens, code en ligne
+      et blocs de code avec bouton copier. **Tout est échappé avant mise en forme** —
+      le texte vient d'un modèle, il ne doit jamais pouvoir injecter de HTML
+- [x] Bloc « Raisonnement » repliable, replié par défaut, alimenté par l'événement SSE
+      `reasoning`
+- [x] Thème clair / sombre / auto, mise en page responsive (testée en 390 px)
+- [x] Curseur clignotant pendant la génération, bouton « stop » (`AbortController`) qui
+      conserve le texte déjà reçu
+- [x] Panneau de réglages : prompt système et température
+- [x] Ligne de statistiques par réponse : modèle, jetons, durée, débit en jetons/s
+- [x] Rendu Markdown limité à une image par seconde (`requestAnimationFrame`) plutôt
+      qu'à chaque fragment reçu
+- [x] **Vérification** : parcours complet automatisé dans un vrai Chromium — envoi,
+      streaming, raisonnement replié, liste, bloc de code, lien, bouton stop visible
+      pendant la génération, aucune erreur console, en thème clair, sombre et mobile
+- [ ] **Vérification en réel** : ouvrir `http://192.168.0.40:8474/` et converser avec
+      `deepseek-r1:8b`
 
 ### Phase 5 — Persistance
 
@@ -285,6 +298,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 |---|---|---|---|---|---|---|
 | 1 | 2026-09-05 | 3 | `{"detail":"Method Not Allowed"}` en ouvrant `/api/chat` dans un navigateur | **Faux bug.** `/api/chat` n'accepte que le POST ; la barre d'adresse d'un navigateur émet un GET → 405 | Aucune. Comportement attendu. Utiliser `/docs`, `/health` ou `/api/models` depuis un navigateur ; la page de chat de la phase 4 fera les POST | Clos |
 | 2 | 2026-09-05 | 2 | Le raisonnement de `deepseek-r1:8b` était purement perdu | Le provider Ollama ne lisait que `message.content` ; Ollama renvoie le monologue interne dans un champ **`thinking`** distinct (confirmé sur l'instance réelle) | Champ `reasoning` ajouté à `ChatChunk` et propagé jusqu'à l'API ; même traitement pour `thinking_delta` (Anthropic) et `reasoning_content` (DeepSeek, OpenRouter). 7 tests dédiés | Corrigé |
+| 3 | 2026-09-05 | 4 | Le panneau de réglages s'affichait alors qu'il portait l'attribut `hidden` | `.reglages { display: grid }` est une règle d'auteur : elle l'emporte sur le `[hidden] { display: none }` de la feuille du navigateur | Règle globale `[hidden] { display: none !important; }` ajoutée en tête de la feuille de style | Corrigé |
 
 ### Points de vigilance observés en production
 
@@ -324,3 +338,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Raisonnement et réponse transportés dans deux champs distincts | Les fusionner est irréversible côté client ; l'interface doit pouvoir replier le monologue interne sans le confondre avec la réponse |
 | 2026-09-05 | Le champ `reasoning` est **absent** (et non vide) pour un modèle classique | Permet au client de distinguer « ce modèle ne raisonne pas » de « raisonnement vide » |
 | 2026-09-05 | Dans la couche OpenAI, le raisonnement passe par `reasoning_content` | Champ hors contrat OpenAI mais convention de fait chez DeepSeek et OpenRouter ; les clients stricts l'ignorent sans dommage |
+| 2026-09-05 | Rendu Markdown écrit à la main plutôt qu'une bibliothèque en CDN | Le conteneur doit rester utilisable sur un réseau sans accès à Internet ; un CDN injoignable casserait toute l'interface |
+| 2026-09-05 | Le message de l'utilisateur est inséré en `textContent`, jamais interprété | Il n'a pas à être rendu comme du Markdown, et cela supprime une surface d'injection |
+| 2026-09-05 | Interface servie avec `Cache-Control: no-cache` | Une mise à jour de l'image ne doit pas rester masquée par le cache du navigateur |
+| 2026-09-05 | Thème affiché en toutes lettres (auto / clair / sombre) plutôt qu'en pictogramme | Le glyphe ◐ manque dans beaucoup de polices système — constaté à la capture d'écran |

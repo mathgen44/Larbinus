@@ -1,0 +1,266 @@
+/* Larbinus — feuille de style unique, sans dépendance ni étape de build. */
+
+:root {
+  --fond: #ffffff;
+  --fond-doux: #f4f5f7;
+  --fond-eleve: #ffffff;
+  --bordure: #e2e5ea;
+  --texte: #1c1f24;
+  --texte-doux: #646c78;
+  --accent: #3b6ef0;
+  --accent-texte: #ffffff;
+  --code-fond: #f4f5f7;
+  --erreur: #b3261e;
+  --erreur-fond: #fdeceb;
+  --rayon: 12px;
+  --largeur: 780px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="clair"]) {
+    --fond: #14161a;
+    --fond-doux: #1b1e24;
+    --fond-eleve: #20242b;
+    --bordure: #2c313a;
+    --texte: #e6e8ec;
+    --texte-doux: #9aa3b0;
+    --accent: #6b95ff;
+    --accent-texte: #0d1017;
+    --code-fond: #1b1e24;
+    --erreur: #ff8a80;
+    --erreur-fond: #3a1d1b;
+  }
+}
+
+:root[data-theme="sombre"] {
+  --fond: #14161a;
+  --fond-doux: #1b1e24;
+  --fond-eleve: #20242b;
+  --bordure: #2c313a;
+  --texte: #e6e8ec;
+  --texte-doux: #9aa3b0;
+  --accent: #6b95ff;
+  --accent-texte: #0d1017;
+  --code-fond: #1b1e24;
+  --erreur: #ff8a80;
+  --erreur-fond: #3a1d1b;
+}
+
+* { box-sizing: border-box; }
+
+/* Indispensable : `.reglages { display: grid }` est une règle d'auteur, elle
+   l'emporte sur le `[hidden] { display: none }` de la feuille du navigateur.
+   Sans ce !important, l'attribut `hidden` n'a aucun effet sur ces éléments. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  background: var(--fond);
+  color: var(--texte);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- barre -- */
+.barre {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--bordure);
+  background: var(--fond-eleve);
+  position: sticky; top: 0; z-index: 5;
+}
+
+.marque { display: flex; align-items: center; gap: 8px; }
+
+.pastille {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--texte-doux); flex: none;
+}
+.pastille.ok { background: #2ea043; }
+.pastille.ko { background: var(--erreur); }
+
+.champ-modele { flex: 1; min-width: 0; }
+
+select, textarea, input[type="range"] {
+  font: inherit; color: inherit;
+}
+
+select {
+  width: 100%; max-width: 420px;
+  padding: 7px 10px;
+  background: var(--fond-doux);
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+}
+
+.actions-barre { display: flex; gap: 4px; }
+
+.bouton-icone {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  font-size: 15px;
+  background: transparent; color: var(--texte-doux);
+  border: 1px solid transparent; border-radius: 8px;
+  cursor: pointer;
+}
+.bouton-icone:hover { background: var(--fond-doux); color: var(--texte); }
+
+/* Le thème s'affiche en toutes lettres plutôt qu'en pictogramme : les glyphes
+   de type ◐ manquent dans beaucoup de polices système, et un libellé est de
+   toute façon plus clair qu'une icône à deviner. */
+.bouton-texte {
+  height: 34px; padding: 0 10px;
+  font: inherit; font-size: 12px;
+  background: transparent; color: var(--texte-doux);
+  border: 1px solid var(--bordure); border-radius: 8px;
+  cursor: pointer;
+}
+.bouton-texte:hover { background: var(--fond-doux); color: var(--texte); }
+
+/* ------------------------------------------------------------ réglages -- */
+.reglages {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--bordure);
+  background: var(--fond-doux);
+  display: grid; gap: 12px;
+  max-width: var(--largeur); margin: 0 auto; width: 100%;
+}
+.reglages label { display: grid; gap: 6px; font-size: 13px; color: var(--texte-doux); }
+.reglages textarea {
+  padding: 8px 10px; border: 1px solid var(--bordure); border-radius: 8px;
+  background: var(--fond); color: var(--texte); resize: vertical;
+}
+.ligne-temperature { grid-template-columns: auto auto 1fr; align-items: center; gap: 10px; }
+.note { margin: 0; font-size: 12px; color: var(--texte-doux); }
+
+/* ------------------------------------------------------------------ fil -- */
+.fil {
+  width: 100%; max-width: var(--largeur); margin: 0 auto;
+  padding: 24px 16px 8px;
+  display: flex; flex-direction: column; gap: 18px;
+  overflow-y: auto;
+}
+
+.accueil { margin: auto; text-align: center; color: var(--texte-doux); }
+.accueil h1 { margin: 0 0 4px; font-size: 30px; color: var(--texte); }
+.accueil p { margin: 4px 0; }
+.accueil-etat { font-size: 13px; }
+
+.message { display: grid; gap: 6px; }
+.message .role { font-size: 12px; color: var(--texte-doux); }
+
+.bulle {
+  padding: 12px 14px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure);
+  background: var(--fond-eleve);
+  overflow-wrap: anywhere;
+}
+.message.utilisateur { justify-items: end; }
+.message.utilisateur .bulle {
+  background: var(--accent); color: var(--accent-texte);
+  border-color: transparent; max-width: 85%;
+}
+.message.erreur .bulle {
+  background: var(--erreur-fond); border-color: var(--erreur); color: var(--erreur);
+}
+
+.bulle > :first-child { margin-top: 0; }
+.bulle > :last-child { margin-bottom: 0; }
+.bulle h1, .bulle h2, .bulle h3 { line-height: 1.3; margin: 1em 0 .4em; }
+.bulle h1 { font-size: 1.35em; } .bulle h2 { font-size: 1.2em; } .bulle h3 { font-size: 1.05em; }
+.bulle ul, .bulle ol { padding-left: 1.3em; }
+.bulle blockquote {
+  margin: .6em 0; padding-left: .9em;
+  border-left: 3px solid var(--bordure); color: var(--texte-doux);
+}
+.bulle a { color: var(--accent); }
+.bulle table { border-collapse: collapse; }
+.bulle td, .bulle th { border: 1px solid var(--bordure); padding: 4px 8px; }
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+}
+.bulle > p code, .bulle li code {
+  background: var(--code-fond); padding: .1em .35em; border-radius: 4px;
+}
+
+/* Le bloc de code défile horizontalement plutôt que d'élargir la page. */
+.bloc-code { position: relative; margin: .7em 0; }
+.bloc-code pre {
+  margin: 0; padding: 12px 14px;
+  background: var(--code-fond);
+  border: 1px solid var(--bordure); border-radius: 8px;
+  overflow-x: auto;
+}
+.copier {
+  position: absolute; top: 6px; right: 6px;
+  padding: 3px 8px; font-size: 12px;
+  background: var(--fond-eleve); color: var(--texte-doux);
+  border: 1px solid var(--bordure); border-radius: 6px;
+  cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.bloc-code:hover .copier, .copier:focus { opacity: 1; }
+
+/* ---------------------------------------------------------- raisonnement -- */
+.raisonnement {
+  border: 1px dashed var(--bordure); border-radius: 8px;
+  background: var(--fond-doux);
+  font-size: .92em; color: var(--texte-doux);
+}
+.raisonnement > summary {
+  cursor: pointer; padding: 7px 12px; list-style: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.raisonnement > summary::-webkit-details-marker { display: none; }
+.raisonnement > summary::before { content: "▸"; }
+.raisonnement[open] > summary::before { content: "▾"; }
+.raisonnement .contenu {
+  padding: 0 12px 10px; white-space: pre-wrap;
+  max-height: 320px; overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ pied -- */
+.meta { font-size: 12px; color: var(--texte-doux); }
+
+.curseur::after {
+  content: "▍"; margin-left: 1px;
+  animation: clignote 1s steps(2) infinite;
+}
+@keyframes clignote { 50% { opacity: 0; } }
+
+.composeur {
+  position: sticky; bottom: 0;
+  width: 100%; max-width: var(--largeur); margin: 0 auto;
+  padding: 12px 16px 18px;
+  display: flex; gap: 8px; align-items: flex-end;
+  background: linear-gradient(to top, var(--fond) 72%, transparent);
+}
+.composeur textarea {
+  flex: 1; resize: none; max-height: 200px;
+  padding: 11px 14px;
+  background: var(--fond-eleve); color: var(--texte);
+  border: 1px solid var(--bordure); border-radius: var(--rayon);
+}
+.composeur button {
+  width: 42px; height: 42px; flex: none;
+  font-size: 17px; cursor: pointer;
+  background: var(--accent); color: var(--accent-texte);
+  border: none; border-radius: var(--rayon);
+}
+.composeur button:disabled { opacity: .45; cursor: default; }
+#arreter { background: var(--erreur); color: #fff; }
+
+@media (max-width: 620px) {
+  .barre { flex-wrap: wrap; }
+  .champ-modele { order: 3; flex-basis: 100%; }
+  select { max-width: none; }
+}

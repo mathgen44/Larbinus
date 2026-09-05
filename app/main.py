@@ -3,10 +3,12 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.providers.base import ProviderError
@@ -95,16 +97,27 @@ async def health(request: Request) -> JSONResponse:
     )
 
 
-@app.get("/", tags=["système"])
-async def root() -> JSONResponse:
-    """Racine — remplacée par l'interface de chat en phase 4."""
+STATIC_DIR = Path(__file__).parent / "static"
+INDEX = STATIC_DIR / "index.html"
+
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", tags=["système"], include_in_schema=False)
+async def root():
+    """Interface de chat, ou description JSON si les fichiers statiques manquent."""
+    if INDEX.is_file():
+        # no-cache : l'interface est servie par le conteneur, une mise à jour
+        # de l'image ne doit pas rester masquée par le cache du navigateur.
+        return FileResponse(INDEX, headers={"Cache-Control": "no-cache"})
     return JSONResponse(
         {
             "name": settings.app_name,
             "version": settings.version,
             "docs": "/docs",
             "health": "/health",
-            "message": "Socle opérationnel. Interface de chat à venir (phase 4).",
+            "message": "Interface absente de l'image.",
         }
     )
 

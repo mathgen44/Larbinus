@@ -48,6 +48,10 @@ curl -N http://localhost:8474/api/chat \
   -d '{"model":"ollama/mistral","messages":[{"role":"user","content":"Bonjour"}]}'
 ```
 
+L'interface de chat est servie à la racine : **http://localhost:8474/**
+(sélecteur de modèle, streaming, bloc « Raisonnement » repliable pour les modèles
+qui en produisent, thème clair/sombre, utilisable au téléphone).
+
 Documentation interactive de l'API : http://localhost:8474/docs
 
 ## API compatible OpenAI
