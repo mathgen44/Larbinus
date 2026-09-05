@@ -40,7 +40,38 @@ curl http://localhost:8474/api/providers
 # [{"name":"ollama","available":false,"detail":"injoignable à l'adresse …","model_count":null}]
 ```
 
+Dialoguer avec un modèle, en flux :
+
+```bash
+curl -N http://localhost:8474/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"model":"ollama/mistral","messages":[{"role":"user","content":"Bonjour"}]}'
+```
+
 Documentation interactive de l'API : http://localhost:8474/docs
+
+## API compatible OpenAI
+
+Larbinus expose `/v1/chat/completions` et `/v1/models` au format OpenAI. N'importe
+quel client de cet écosystème — n8n, Open WebUI, les SDK officiels — peut donc viser
+Larbinus sans adaptateur, en choisissant le fournisseur par le nom du modèle :
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://192.168.0.40:8474/v1", api_key="votre-cle-ou-nimporte-quoi")
+
+reponse = client.chat.completions.create(
+    model="ollama/mistral",                       # ou openai/gpt-4o-mini, anthropic/…
+    messages=[{"role": "user", "content": "Bonjour"}],
+    stream=True,
+)
+for fragment in reponse:
+    print(fragment.choices[0].delta.content or "", end="")
+```
+
+Si `LARBINUS_API_KEY` est renseignée, elle est attendue dans `X-API-Key` **ou**
+`Authorization: Bearer` — ce dernier étant ce qu'envoient les clients OpenAI.
 
 ## Configuration
 

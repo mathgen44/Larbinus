@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 2 — Couche fournisseurs (terminée, à valider en réel) → Phase 3 |
+| **Phase en cours** | Phase 3 — API de chat (terminée, à valider en réel) → Phase 4 |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -144,17 +144,30 @@ Larbinus/
 - [ ] **Vérification en réel** : `GET /api/models` renvoie bien les modèles de
       l'instance Ollama une fois le conteneur déployé
 
-### Phase 3 — API de chat
+### Phase 3 — API de chat ✅ *terminée (validée par tests + serveur réel simulé)*
 
-- [ ] `POST /api/chat` : `{provider, model, messages, system, temperature, stream}`
-- [ ] Streaming SSE token par token, avec annulation propre côté client
-- [ ] Comptage des tokens et durée de réponse dans l'événement final
-- [ ] Erreurs normalisées (fournisseur injoignable, clé invalide, modèle inconnu)
-- [ ] **Couche compatible OpenAI** : `POST /v1/chat/completions` (streaming `data:` +
-      `[DONE]`) et `GET /v1/models`, modèles exposés sous la forme `fournisseur/modèle`
-- [ ] Accepter `Authorization: Bearer` en plus de `X-API-Key`
-- [ ] **Vérification** : `curl -N` sur les 4 fournisseurs, réponse en flux
-- [ ] **Vérification** : un nœud n8n « OpenAI » pointé sur Larbinus fonctionne sans adaptateur
+- [x] `POST /api/chat` : `{model, messages, system, temperature, max_tokens, stream}`
+- [x] Streaming SSE événementiel (`delta` / `done` / `error`), avec arrêt sur
+      déconnexion du client (`request.is_disconnected()`)
+- [x] Comptage des jetons et `duration_ms` dans l'événement `done`
+- [x] Mode non-streaming (`stream: false`) renvoyant la réponse complète en JSON
+- [x] Erreurs normalisées : gestionnaire global `ProviderError` → code HTTP cohérent
+      (503 / 401 / 404 / 429 / 400) ; une fois le flux commencé, l'erreur passe par
+      un événement SSE `error` puisque les en-têtes sont déjà partis
+- [x] **Couche compatible OpenAI** : `POST /v1/chat/completions` (fragments
+      `chat.completion.chunk` + `data: [DONE]`) et `GET /v1/models`
+- [x] Champs OpenAI inconnus (`top_p`, `presence_penalty`, `user`…) ignorés sans erreur
+- [x] `app/security.py` : `X-API-Key` **ou** `Authorization: Bearer`, comparaison à
+      temps constant ; `/health` reste public pour le `HEALTHCHECK` Docker
+- [x] En-tête `X-Accel-Buffering: no` pour empêcher un reverse proxy Nginx de
+      mettre le flux en tampon
+- [x] 27 tests au vert
+- [x] **Vérification** : serveur réel lancé contre un faux Ollama qui répond en 250 ms
+      par mot — fragments reçus au fil de l'eau (+116, +365, +615 ms…), pas d'un bloc
+- [x] **Vérification** : le SDK officiel `openai` (celui qu'utilise n8n) dialogue avec
+      Larbinus sans adaptateur, en streaming comme en non-streaming
+- [ ] **Vérification en réel** : `curl -N` contre l'instance Ollama et les API en ligne
+      une fois le conteneur déployé
 
 ### Phase 4 — Interface web
 
@@ -226,6 +239,18 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 
 ---
 
+## 4 bis. Points d'entrée de l'API
+
+| Route | Rôle |
+|---|---|
+| `GET /health` | Sonde Docker — publique, ne contacte aucun fournisseur |
+| `GET /api/models` | Modèles agrégés, identifiés `fournisseur/modèle` |
+| `GET /api/providers` | État détaillé de chaque fournisseur (diagnostic) |
+| `POST /api/chat` | Conversation, SSE par défaut (`stream: false` pour du JSON) |
+| `GET /v1/models` | Idem, au format OpenAI |
+| `POST /v1/chat/completions` | Conversation au format OpenAI (n8n, Open WebUI, SDK) |
+| `GET /docs` | Documentation interactive générée |
+
 ## 5. Périmètre exclu (pour l'instant)
 
 - Multi-utilisateurs avec comptes et permissions
@@ -271,3 +296,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | `/health` ne contacte aucun fournisseur | Une API externe en panne ferait redémarrer le conteneur en boucle via le `HEALTHCHECK` ; le diagnostic des fournisseurs vit dans `/api/providers` |
 | 2026-09-05 | `request.system` l'emporte sur un message de rôle `system` dans l'historique | Évite qu'un persona (phase 6) soit écrasé silencieusement par un historique importé |
 | 2026-09-05 | Le préfixe n'est retiré que s'il correspond au fournisseur | Sinon `openai/mistralai/Mistral-7B` (OpenRouter) serait tronqué |
+| 2026-09-05 | Routes réparties en `app/routers/` (`models`, `chat`, `openai`) | `main.py` redevenait un fourre-tout ; la couche OpenAI doit rester isolable |
+| 2026-09-05 | Une erreur survenant après le début du flux est émise en SSE, pas en code HTTP | Les en-têtes de la réponse sont déjà envoyés : renvoyer un 503 est impossible à ce stade |
+| 2026-09-05 | En-tête `X-Accel-Buffering: no` sur les réponses SSE | Sans lui, un reverse proxy Nginx (déjà présent dans le homelab) met le flux en tampon et le streaming devient invisible |
+| 2026-09-05 | Le premier fragment OpenAI porte `{"role": "assistant"}` | Certains clients, dont d'anciens nœuds n8n, l'attendent avant tout contenu |

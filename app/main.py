@@ -11,7 +11,9 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
-from app.schemas import ModelInfo, ProviderStatus
+from app.routers import chat as chat_router
+from app.routers import models as models_router
+from app.routers import openai as openai_router
 
 settings = get_settings()
 
@@ -72,10 +74,6 @@ async def provider_error_handler(request: Request, exc: ProviderError) -> JSONRe
     return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
 
 
-def get_registry(request: Request) -> ProviderRegistry:
-    return request.app.state.registry
-
-
 # --------------------------------------------------------------------------- #
 #  Système
 # --------------------------------------------------------------------------- #
@@ -112,21 +110,8 @@ async def root() -> JSONResponse:
 
 
 # --------------------------------------------------------------------------- #
-#  Modèles et fournisseurs
+#  Routeurs
 # --------------------------------------------------------------------------- #
-@app.get("/api/models", response_model=list[ModelInfo], tags=["modèles"])
-async def list_models(request: Request) -> list[ModelInfo]:
-    """Modèles de tous les fournisseurs actifs, identifiés `fournisseur/modèle`.
-
-    Un fournisseur injoignable est ignoré plutôt que de faire échouer l'appel :
-    l'interface reste utilisable si une seule API est en panne.
-    """
-    registry: ProviderRegistry = request.app.state.registry
-    return await registry.list_models()
-
-
-@app.get("/api/providers", response_model=list[ProviderStatus], tags=["modèles"])
-async def list_providers(request: Request) -> list[ProviderStatus]:
-    """État de chaque fournisseur configuré — utile pour diagnostiquer une panne."""
-    registry: ProviderRegistry = request.app.state.registry
-    return await registry.statuses()
+app.include_router(models_router.router)   # /api/models, /api/providers
+app.include_router(chat_router.router)     # /api/chat
+app.include_router(openai_router.router)   # /v1/chat/completions, /v1/models
