@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger("larbinus.db")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -73,6 +73,49 @@ MIGRATIONS: dict[int, list[str]] = {
         """,
         "ALTER TABLE conversations ADD COLUMN persona_id TEXT",
         "ALTER TABLE conversations ADD COLUMN temperature REAL",
+    ],
+    3: [
+        """
+        CREATE TABLE IF NOT EXISTS documents (
+            id              TEXT PRIMARY KEY,
+            source          TEXT NOT NULL,      -- 'depot' ou 'dossier'
+            path            TEXT,               -- chemin relatif si dossier surveillé
+            filename        TEXT NOT NULL,
+            bytes           INTEGER,
+            sha256          TEXT NOT NULL,
+            chunk_count     INTEGER NOT NULL DEFAULT 0,
+            status          TEXT NOT NULL,      -- en_attente | indexe | erreur
+            error           TEXT,
+            embedding_model TEXT,
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT NOT NULL
+        )
+        """,
+        # L'empreinte est unique : déposer deux fois le même fichier ne crée
+        # pas deux documents, quel que soit son nom.
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_sha ON documents(sha256)",
+        """
+        CREATE TABLE IF NOT EXISTS chunks (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+            ordinal     INTEGER NOT NULL,
+            content     TEXT NOT NULL,
+            heading     TEXT,
+            page        INTEGER,
+            embedding   BLOB,
+            created_at  TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id)",
+        """
+        CREATE TABLE IF NOT EXISTS rag_meta (
+            id         INTEGER PRIMARY KEY CHECK (id = 1),
+            dimension  INTEGER,
+            model      TEXT,
+            updated_at TEXT
+        )
+        """,
+        "ALTER TABLE conversations ADD COLUMN rag INTEGER NOT NULL DEFAULT 0",
     ],
 }
 
@@ -278,6 +321,7 @@ class Database:
         systeme: str | None = None,
         persona_id: str | None = None,
         temperature: float | None = None,
+        rag: bool = False,
     ) -> dict:
         identifiant = uuid.uuid4().hex
         horodatage = maintenant()
@@ -286,11 +330,11 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO conversations (id, title, model, system, persona_id,
-                                           temperature, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                           temperature, rag, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (identifiant, titre or TITRE_PAR_DEFAUT, modele, systeme,
-                 persona_id, temperature, horodatage, horodatage),
+                 persona_id, temperature, int(rag), horodatage, horodatage),
             )
 
         await self._ecrire(action)
@@ -301,13 +345,14 @@ class Database:
             "system": systeme,
             "persona_id": persona_id,
             "temperature": temperature,
+            "rag": int(rag),
             "created_at": horodatage,
             "updated_at": horodatage,
             "message_count": 0,
         }
 
     async def modifier_conversation(self, identifiant: str, **champs) -> dict | None:
-        autorises = {"title", "model", "system", "temperature"}
+        autorises = {"title", "model", "system", "temperature", "rag"}
         mises_a_jour = {k: v for k, v in champs.items() if k in autorises and v is not None}
         if not mises_a_jour:
             return await self.conversation(identifiant)

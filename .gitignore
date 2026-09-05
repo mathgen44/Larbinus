@@ -11,6 +11,9 @@ venv/
 
 # Données persistantes (SQLite, index RAG, uploads)
 data/
+# Dossier surveillé : le dossier est versionné, pas son contenu
+documents/*
+!documents/.gitkeep
 *.db
 *.sqlite3
 

@@ -13,8 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
+from app.rag.depot import DepotDocuments
+from app.rag.embeddings import construire_client
+from app.rag.service import ServiceRag
 from app.routers import chat as chat_router
 from app.routers import conversations as conversations_router
+from app.routers import documents as documents_router
 from app.routers import models as models_router
 from app.routers import personas as personas_router
 from app.routers import openai as openai_router
@@ -40,6 +44,18 @@ async def lifespan(app: FastAPI):
     await db.connect()
     app.state.db = db
 
+    depot = DepotDocuments(db)
+    await depot.preparer()
+    rag = ServiceRag(depot, construire_client(settings), settings)
+    app.state.rag = rag
+    if rag.disponible:
+        logger.info(
+            "RAG actif — embeddings « %s » via %s",
+            settings.embedding_model, settings.embedding_provider,
+        )
+    else:
+        logger.info("RAG inactif : aucun service d'embeddings configuré.")
+
     if registry.names:
         logger.info("Fournisseurs activés : %s", ", ".join(registry.names))
     else:
@@ -53,6 +69,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await registry.aclose()
+        await rag.aclose()
         await db.close()
         logger.info("Arrêt de %s", settings.app_name)
 
@@ -137,4 +154,5 @@ app.include_router(models_router.router)   # /api/models, /api/providers
 app.include_router(chat_router.router)     # /api/chat
 app.include_router(conversations_router.router)  # /api/conversations
 app.include_router(personas_router.router)       # /api/personas
+app.include_router(documents_router.router)      # /api/documents
 app.include_router(openai_router.router)   # /v1/chat/completions, /v1/models

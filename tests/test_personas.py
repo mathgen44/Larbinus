@@ -88,6 +88,9 @@ async def test_migration_depuis_une_base_v1_sans_perte(tmp_path):
     # Les nouvelles colonnes existent, les personas d'exemple sont là.
     assert (await db.conversation("c1"))["persona_id"] is None
     assert len(await db.liste_personas()) == 4
+    # La migration v3 (RAG) doit s'appliquer dans la foulée, sans rupture.
+    assert await db._lire("SELECT COUNT(*) AS n FROM documents")
+    assert (await db.conversation("c1"))["rag"] == 0
     await db.close()
 
     # Réouverture : la migration ne doit pas rejouer ni dupliquer les exemples.

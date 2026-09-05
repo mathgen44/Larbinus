@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 6 terminée (à valider en réel) → Phase 7 (RAG) |
+| **Phase en cours** | Phase 7a terminée (socle RAG) → 7b (intégration au chat) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -30,6 +30,9 @@ correction. Toute décision d'architecture qui change le cap va dans le § 8.
 | API compatible OpenAI | **Oui** — `/v1/chat/completions` et `/v1/models` en plus de l'API native | 2026-09-05 |
 | Licence | MIT | 2026-09-05 |
 | Port publié | `8474` par défaut (8080 occupé par SearXNG sur la machine cible) | 2026-09-05 |
+| Documents RAG | PDF, Markdown/texte, Word, Excel, HTML | 2026-09-05 |
+| Ingestion | Dépôt dans l'interface **et** dossier surveillé monté dans le conteneur | 2026-09-05 |
+| Stockage vectoriel | SQLite + `sqlite-vec`, avec repli en Python | 2026-09-05 |
 
 **Pourquoi Python/FastAPI** : écosystème IA le plus riche (SDK officiels des quatre
 fournisseurs, briques RAG matures), streaming SSE natif et simple, image finale légère
@@ -250,14 +253,41 @@ Larbinus/
 - [ ] **Vérification en réel** : `git pull` sur 192.168.0.40 — la base existante doit
       se migrer seule au redémarrage, sans perdre les conversations de la phase 5
 
-### Phase 7 — RAG documents locaux
+### Phase 7a — Socle documentaire ✅ *terminée (validée par tests)*
 
-- [ ] Choix du stockage vectoriel (SQLite + `sqlite-vec`, ou Chroma en volume)
-- [ ] Ingestion : PDF, DOCX, MD, TXT — découpage en fragments + métadonnées
-- [ ] Embeddings via Ollama (`nomic-embed-text`) avec repli sur API en ligne
-- [ ] Recherche sémantique et injection du contexte dans le prompt
-- [ ] Réponses sourcées (extraits + nom de fichier affichés dans l'UI)
-- [ ] Écran d'upload et de gestion des collections
+- [x] **Migration v3** : tables `documents`, `chunks`, `rag_meta`, colonne `rag`
+      sur `conversations` — appliquée à la suite des migrations existantes
+- [x] Extraction par format : PDF (`pypdf`), Word (`python-docx`), Excel
+      (`openpyxl`), HTML (`beautifulsoup4`, scripts et navigation retirés),
+      Markdown et texte (découpage par titres)
+- [x] Un PDF scanné produit un message explicite plutôt qu'un document vide
+- [x] Découpage respectant les frontières de phrases, avec chevauchement ;
+      les résidus trop courts sont rattachés au morceau précédent
+- [x] Chaque fragment vectorisé est précédé de sa provenance
+      (`[document — section — page]`), sans quoi un extrait isolé n'est
+      rattachable à rien
+- [x] Embeddings via Ollama (`/api/embed`, repli sur `/api/embeddings` pour les
+      versions anciennes) ou API compatible OpenAI, par paquets de 32
+- [x] Index `sqlite-vec` dans la base existante, **avec repli en similarité
+      cosinus calculée en Python** si l'extension ne peut pas être chargée
+- [x] Dimension et modèle d'embedding enregistrés : changer de modèle est
+      détecté et signalé au lieu de produire des résultats faux
+- [x] Empreinte SHA-256 unique : déposer deux fois le même fichier ne crée pas
+      deux documents, quel que soit son nom
+- [x] Dossier surveillé (`DOCUMENTS_DIR`, volume `./documents`) parcouru
+      récursivement ; un scan ne réindexe que ce qui a changé
+- [x] API : `GET/POST /api/documents`, `POST /api/documents/scan`,
+      `POST /{id}/reindexer`, `DELETE /{id}`, `POST /reinitialiser`,
+      `GET /api/documents/recherche`
+- [x] 77 tests au vert, dont un qui rejoue la recherche **sans** `sqlite-vec`
+      pour vérifier que le filet de sécurité donne les mêmes résultats
+
+### Phase 7b — Intégration au chat et interface
+
+- [ ] Injection du contexte dans la conversation quand le RAG est actif
+- [ ] Sources citées sous la réponse, avec extrait et provenance
+- [ ] Bascule « documents » par conversation
+- [ ] Écran de gestion : dépôt par glisser-déposer, liste, scan, suppression
 - [ ] **Vérification** : question dont la réponse n'existe que dans un document ingéré
 
 ### Phase 8 — Sécurité & mise en production homelab
@@ -391,3 +421,9 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | La création d'un larbin se déclenche depuis la grille de choix (carte « + ») | C'est en parcourant les larbins existants qu'on constate qu'il en manque un ; obliger à passer par un écran de gestion séparé ajoute une étape inutile |
 | 2026-09-05 | Le bouton « Supprimer » disparaît en mode création au lieu de changer de libellé | Un bouton qui change de rôle selon un état invisible est une source d'erreur ; mieux vaut qu'il ne soit pas là |
 | 2026-09-05 | Palette d'emojis cliquables plutôt qu'un simple champ texte pour l'icône | Un champ vide n'indique pas qu'il attend un emoji ; question posée par l'utilisateur, donc défaut d'interface avéré. Les emojis proposés sont choisis parmi les symboles largement présents dans les polices système |
+| 2026-09-05 | `sqlite-vec` dans la base existante, avec repli en Python | Garde un conteneur unique et un seul volume ; le repli évite qu'un build de Python sans support des extensions rende tout le RAG inutilisable |
+| 2026-09-05 | Le fournisseur d'embeddings est indépendant du modèle de conversation | Permet de discuter avec une API en ligne tout en vectorisant en local — les documents ne partent pas chez un tiers |
+| 2026-09-05 | La provenance est intégrée au texte vectorisé, pas seulement stockée à côté | Un fragment parlant de « la version 3 » ne se rattache à rien sans son en-tête ; avec le nom du document et la section, il devient retrouvable |
+| 2026-09-05 | Dimension et modèle d'embedding verrouillés à la première indexation | Des vecteurs produits par deux modèles différents ne sont pas comparables : mieux vaut refuser que renvoyer des résultats silencieusement faux |
+| 2026-09-05 | Une erreur d'extraction est enregistrée sur le document, jamais propagée | Un fichier illisible au milieu d'un dossier ne doit pas interrompre le traitement des autres |
+| 2026-09-05 | Déduplication par empreinte SHA-256 | Le même fichier déposé sous deux noms, ou présent à la fois dans le dossier et en dépôt manuel, ne doit pas être indexé deux fois |

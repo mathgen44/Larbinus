@@ -24,15 +24,15 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Utilisateur non privilégié
 RUN useradd --create-home --uid 1000 larbinus \
- && mkdir -p /data \
- && chown -R larbinus:larbinus /data
+ && mkdir -p /data /documents \
+ && chown -R larbinus:larbinus /data /documents
 
 WORKDIR /app
 COPY --chown=larbinus:larbinus app/ ./app/
 
 USER larbinus
 EXPOSE 8080
-VOLUME ["/data"]
+VOLUME ["/data", "/documents"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status == 200 else 1)"

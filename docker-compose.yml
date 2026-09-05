@@ -11,6 +11,10 @@ services:
       - "${LARBINUS_PORT:-8474}:8080"
     volumes:
       - ./data:/data
+      # Dossier surveillé : déposez-y vos documents (PDF, Markdown, Word,
+      # Excel, HTML) et lancez un scan depuis l'interface. Peut pointer vers
+      # un partage NFS ou Samba monté sur l'hôte.
+      - ./documents:/documents
     extra_hosts:
       # Permet d'atteindre un Ollama installé sur l'hôte via http://host.docker.internal:11434
       - "host.docker.internal:host-gateway"

@@ -53,6 +53,21 @@ class Settings(BaseSettings):
     default_provider: str | None = None
     default_model: str | None = None
 
+    # --- Documents et RAG ---
+    #: Fournisseur d'embeddings : « ollama », « openai », ou vide pour désactiver
+    #: l'indexation. Indépendant du modèle de conversation : on peut discuter
+    #: avec une API en ligne tout en vectorisant les documents en local.
+    embedding_provider: str = "ollama"
+    embedding_model: str = "nomic-embed-text"
+
+    #: Dossier surveillé, monté dans le conteneur.
+    documents_dir: str = "/documents"
+
+    rag_top_k: int = 5
+    rag_chunk_size: int = 1000
+    rag_chunk_overlap: int = 150
+    max_document_bytes: int = 25 * 1024 * 1024
+
     # --- Réseau ---
     request_timeout: float = 120.0
 
