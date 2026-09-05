@@ -8,52 +8,67 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 </head>
 <body>
-  <header class="barre">
-    <div class="marque">
-      <span class="pastille" id="pastille" title="État du service"></span>
-      <strong>Larbinus</strong>
-    </div>
+<div class="application">
 
-    <label class="champ-modele">
-      <span class="sr-only">Modèle</span>
-      <select id="modele" aria-label="Modèle"></select>
-    </label>
+  <aside class="panneau" id="panneau">
+    <button id="nouvelle" class="bouton-plein">+ Nouvelle conversation</button>
+    <nav class="liste" id="liste-conversations" aria-label="Conversations"></nav>
+    <p class="liste-vide" id="liste-vide">Aucune conversation enregistrée.</p>
+  </aside>
 
-    <div class="actions-barre">
-      <button id="reglages-bouton" class="bouton-icone" title="Réglages" aria-expanded="false">⚙</button>
-      <button id="theme-bouton" class="bouton-texte" title="Thème">auto</button>
-      <button id="effacer" class="bouton-icone" title="Nouvelle conversation">✕</button>
-    </div>
-  </header>
+  <div class="voile" id="voile" hidden></div>
 
-  <section id="reglages" class="reglages" hidden>
-    <label>
-      Prompt système
-      <textarea id="prompt-systeme" rows="3"
-                placeholder="Optionnel — ex. « Réponds en français, de façon concise. »"></textarea>
-    </label>
-    <label class="ligne-temperature">
-      Température <output id="temperature-valeur">0.7</output>
-      <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
-    </label>
-    <p class="note">Les conversations ne sont pas encore enregistrées — elles disparaissent au rechargement (phase 5).</p>
-  </section>
+  <div class="colonne">
+    <header class="barre">
+      <button id="menu" class="bouton-icone" title="Conversations" aria-expanded="false">☰</button>
 
-  <main id="fil" class="fil" aria-live="polite">
-    <div class="accueil" id="accueil">
-      <h1>Larbinus</h1>
-      <p>Passerelle vers vos modèles, locaux et en ligne.</p>
-      <p class="accueil-etat" id="accueil-etat">Chargement des modèles…</p>
-    </div>
-  </main>
+      <div class="marque">
+        <span class="pastille" id="pastille" title="État du service"></span>
+        <strong>Larbinus</strong>
+      </div>
 
-  <form class="composeur" id="composeur">
-    <textarea id="saisie" rows="1" placeholder="Écrivez votre message…"
-              title="Entrée pour envoyer, Maj+Entrée pour un retour à la ligne"></textarea>
-    <button type="submit" id="envoyer" title="Envoyer">↑</button>
-    <button type="button" id="arreter" title="Arrêter la génération" hidden>■</button>
-  </form>
+      <label class="champ-modele">
+        <span class="sr-only">Modèle</span>
+        <select id="modele" aria-label="Modèle"></select>
+      </label>
 
-  <script src="/static/app.js"></script>
+      <div class="actions-barre">
+        <button id="exporter" class="bouton-icone" title="Exporter en Markdown" hidden>⭳</button>
+        <button id="reglages-bouton" class="bouton-icone" title="Réglages" aria-expanded="false">⚙</button>
+        <button id="theme-bouton" class="bouton-texte" title="Thème">auto</button>
+      </div>
+    </header>
+
+    <section id="reglages" class="reglages" hidden>
+      <label>
+        Prompt système
+        <textarea id="prompt-systeme" rows="3"
+                  placeholder="Optionnel — ex. « Réponds en français, de façon concise. »"></textarea>
+      </label>
+      <label class="ligne-temperature">
+        Température <output id="temperature-valeur">0.7</output>
+        <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+      </label>
+      <p class="note">Le prompt système est enregistré avec la conversation en cours.</p>
+    </section>
+
+    <main id="fil" class="fil" aria-live="polite">
+      <div class="accueil" id="accueil">
+        <h1>Larbinus</h1>
+        <p>Passerelle vers vos modèles, locaux et en ligne.</p>
+        <p class="accueil-etat" id="accueil-etat">Chargement des modèles…</p>
+      </div>
+    </main>
+
+    <form class="composeur" id="composeur">
+      <textarea id="saisie" rows="1" placeholder="Écrivez votre message…"
+                title="Entrée pour envoyer, Maj+Entrée pour un retour à la ligne"></textarea>
+      <button type="submit" id="envoyer" title="Envoyer">↑</button>
+      <button type="button" id="arreter" title="Arrêter la génération" hidden>■</button>
+    </form>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
 </body>
 </html>

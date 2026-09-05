@@ -14,8 +14,10 @@ from app.config import get_settings
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
 from app.routers import chat as chat_router
+from app.routers import conversations as conversations_router
 from app.routers import models as models_router
 from app.routers import openai as openai_router
+from app.storage.db import Database
 
 settings = get_settings()
 
@@ -33,6 +35,10 @@ async def lifespan(app: FastAPI):
     registry = ProviderRegistry(settings)
     app.state.registry = registry
 
+    db = Database(Path(settings.data_dir) / "larbinus.db")
+    await db.connect()
+    app.state.db = db
+
     if registry.names:
         logger.info("Fournisseurs activés : %s", ", ".join(registry.names))
     else:
@@ -46,6 +52,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await registry.aclose()
+        await db.close()
         logger.info("Arrêt de %s", settings.app_name)
 
 
@@ -127,4 +134,5 @@ async def root():
 # --------------------------------------------------------------------------- #
 app.include_router(models_router.router)   # /api/models, /api/providers
 app.include_router(chat_router.router)     # /api/chat
+app.include_router(conversations_router.router)  # /api/conversations
 app.include_router(openai_router.router)   # /v1/chat/completions, /v1/models

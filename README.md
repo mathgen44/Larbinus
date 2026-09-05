@@ -50,7 +50,12 @@ curl -N http://localhost:8474/api/chat \
 
 L'interface de chat est servie à la racine : **http://localhost:8474/**
 (sélecteur de modèle, streaming, bloc « Raisonnement » repliable pour les modèles
-qui en produisent, thème clair/sombre, utilisable au téléphone).
+qui en produisent, historique des conversations, thème clair/sombre, utilisable
+au téléphone).
+
+Les conversations sont enregistrées dans `data/larbinus.db` (SQLite) : elles
+survivent au redémarrage du conteneur et peuvent être exportées en Markdown ou
+en JSON depuis l'interface comme depuis l'API.
 
 Documentation interactive de l'API : http://localhost:8474/docs
 

@@ -29,6 +29,12 @@ class ChatRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, gt=0)
     stream: bool = True
+    conversation_id: str | None = Field(
+        default=None,
+        description="Si fourni, la base devient la source de vérité : le serveur "
+        "relit l'historique enregistré, y ajoute `messages`, puis enregistre la "
+        "question et la réponse. Le client n'envoie alors que le message du tour.",
+    )
 
 
 class ModelInfo(BaseModel):

@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 4 terminée (à valider en réel) → Phase 5 |
+| **Phase en cours** | Phase 5 terminée (à valider en réel) → Phase 6 |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -199,13 +199,28 @@ Larbinus/
 - [ ] **Vérification en réel** : ouvrir `http://192.168.0.40:8474/` et converser avec
       `deepseek-r1:8b`
 
-### Phase 5 — Persistance
+### Phase 5 — Persistance ✅ *terminée (validée par tests + navigateur)*
 
-- [ ] Schéma SQLite : `conversations`, `messages`, `settings`
-- [ ] `GET/POST/DELETE /api/conversations`, reprise d'un fil existant
-- [ ] Liste latérale des conversations dans l'UI, renommage, suppression
-- [ ] Export d'une conversation en Markdown / JSON
-- [ ] **Vérification** : redémarrage du conteneur, l'historique survit
+- [x] `app/storage/db.py` : SQLite en mode WAL, schéma `conversations` + `messages`
+      avec suppression en cascade, `PRAGMA user_version` pour les migrations futures
+- [x] `sqlite3` du module standard plutôt qu'un pilote asynchrone : chaque appel est
+      dépaysé par `asyncio.to_thread`, les écritures sérialisées par un verrou
+- [x] CRUD complet : `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{id}`
+- [x] `conversation_id` optionnel sur `/api/chat` : **la base devient la source de
+      vérité**, le serveur relit l'historique et n'attend du client que le message
+      du tour. Sans ce champ, comportement inchangé (mode sans état)
+- [x] Titre déduit automatiquement de la première question
+- [x] Réponse partielle enregistrée même si la génération est interrompue
+- [x] Export Markdown (raisonnement replié dans un `<details>`) et JSON, avec un nom
+      de fichier lisible dérivé du titre
+- [x] Interface : panneau latéral des conversations, reprise d'un fil, renommage en
+      place, suppression, bouton d'export ; tiroir superposé en dessous de 820 px
+- [x] 47 tests au vert
+- [x] **Vérification navigateur** : deux messages, rechargement complet de la page,
+      reprise du fil (4 messages et 2 blocs de raisonnement retrouvés), renommage,
+      suppression, tiroir mobile — aucune erreur console
+- [ ] **Vérification en réel** : redémarrer le conteneur et vérifier que l'historique
+      survit dans `./data/larbinus.db`
 
 ### Phase 6 — Personas (« larbins »)
 
@@ -299,6 +314,8 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 1 | 2026-09-05 | 3 | `{"detail":"Method Not Allowed"}` en ouvrant `/api/chat` dans un navigateur | **Faux bug.** `/api/chat` n'accepte que le POST ; la barre d'adresse d'un navigateur émet un GET → 405 | Aucune. Comportement attendu. Utiliser `/docs`, `/health` ou `/api/models` depuis un navigateur ; la page de chat de la phase 4 fera les POST | Clos |
 | 2 | 2026-09-05 | 2 | Le raisonnement de `deepseek-r1:8b` était purement perdu | Le provider Ollama ne lisait que `message.content` ; Ollama renvoie le monologue interne dans un champ **`thinking`** distinct (confirmé sur l'instance réelle) | Champ `reasoning` ajouté à `ChatChunk` et propagé jusqu'à l'API ; même traitement pour `thinking_delta` (Anthropic) et `reasoning_content` (DeepSeek, OpenRouter). 7 tests dédiés | Corrigé |
 | 3 | 2026-09-05 | 4 | Le panneau de réglages s'affichait alors qu'il portait l'attribut `hidden` | `.reglages { display: grid }` est une règle d'auteur : elle l'emporte sur le `[hidden] { display: none }` de la feuille du navigateur | Règle globale `[hidden] { display: none !important; }` ajoutée en tête de la feuille de style | Corrigé |
+| 4 | 2026-09-05 | 5 | `DELETE /api/conversations/{id}` faisait échouer le démarrage : « Status code 204 must not have a response body » | L'annotation de retour `-> None` amène FastAPI à générer un modèle de réponse, interdit sur un 204 | `response_class=Response`, annotation retirée, `Response(status_code=204)` renvoyé explicitement | Corrigé |
+| 5 | 2026-09-05 | 5 | Le tiroir mobile fermé restait atteignable au clavier et lu par les lecteurs d'écran | `transform: translateX(-100%)` sort l'élément de l'écran mais le laisse dans l'ordre de tabulation | `visibility: hidden` ajouté, avec une transition retardée pour ne pas couper l'animation | Corrigé |
 
 ### Points de vigilance observés en production
 
@@ -342,3 +359,8 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Le message de l'utilisateur est inséré en `textContent`, jamais interprété | Il n'a pas à être rendu comme du Markdown, et cela supprime une surface d'injection |
 | 2026-09-05 | Interface servie avec `Cache-Control: no-cache` | Une mise à jour de l'image ne doit pas rester masquée par le cache du navigateur |
 | 2026-09-05 | Thème affiché en toutes lettres (auto / clair / sombre) plutôt qu'en pictogramme | Le glyphe ◐ manque dans beaucoup de polices système — constaté à la capture d'écran |
+| 2026-09-05 | `sqlite3` standard plutôt qu'`aiosqlite` | Quelques écritures par réponse : `asyncio.to_thread` suffit, et c'est une dépendance de moins à suivre |
+| 2026-09-05 | Avec `conversation_id`, la base est la source de vérité et le client n'envoie que le message du tour | Interdit toute divergence entre l'état du client et celui du serveur, et allège la charge utile |
+| 2026-09-05 | Le raisonnement est enregistré mais **exclu** de l'historique renvoyé au modèle | Il gonflerait le contexte à chaque tour sans rien apporter, et certains fournisseurs le refusent |
+| 2026-09-05 | La conversation est créée au premier message, pas à l'ouverture de la page | Sinon la liste se remplit de conversations vides à chaque visite |
+| 2026-09-05 | Une génération interrompue est enregistrée telle quelle | Un début de réponse reste utile ; le perdre punirait l'utilisateur d'avoir cliqué sur « stop » |
