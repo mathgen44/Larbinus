@@ -75,11 +75,17 @@ class ProviderNotConfigured(ProviderError):
 class ChatChunk:
     """Un fragment de réponse en streaming.
 
+    `delta` porte la réponse visible, `reasoning` le monologue interne des modèles
+    de raisonnement (deepseek-r1, o-series, Claude en mode réflexion). Les deux sont
+    séparés pour que l'interface puisse replier le second sans le confondre avec la
+    réponse — les mélanger est irréversible côté client.
+
     Le dernier fragment porte `done=True` et, si le fournisseur les communique,
     les compteurs de jetons et la raison d'arrêt.
     """
 
     delta: str = ""
+    reasoning: str = ""
     done: bool = False
     finish_reason: str | None = None
     usage: dict[str, int] = field(default_factory=dict)

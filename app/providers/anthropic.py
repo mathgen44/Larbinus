@@ -91,8 +91,11 @@ class AnthropicProvider(ChatProvider):
 
                     elif kind == "content_block_delta":
                         delta = event.get("delta") or {}
-                        if delta.get("type") == "text_delta" and delta.get("text"):
+                        kind_delta = delta.get("type")
+                        if kind_delta == "text_delta" and delta.get("text"):
                             yield ChatChunk(delta=delta["text"])
+                        elif kind_delta == "thinking_delta" and delta.get("thinking"):
+                            yield ChatChunk(reasoning=delta["thinking"])
 
                     elif kind == "message_delta":
                         finish_reason = (event.get("delta") or {}).get("stop_reason")

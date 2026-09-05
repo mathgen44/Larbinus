@@ -1,7 +1,8 @@
 """API de conversation native de Larbinus.
 
 `POST /api/chat` renvoie soit un flux SSE (`stream: true`, défaut), soit une
-réponse JSON complète. Le flux porte trois types d'événements : `delta`,
+réponse JSON complète. Le flux porte quatre types d'événements : `delta`
+(réponse visible), `reasoning` (monologue interne des modèles de raisonnement),
 `done` et `error`.
 """
 
@@ -51,19 +52,25 @@ async def _complete(provider, body: ChatRequest) -> JSONResponse:
     """Mode non-streaming : on consomme le flux et on renvoie le tout d'un bloc."""
     started = time.perf_counter()
     parts: list[str] = []
+    reasoning_parts: list[str] = []
     finish_reason, usage = "stop", {}
 
     async for chunk in provider.stream_chat(body):
         parts.append(chunk.delta)
+        reasoning_parts.append(chunk.reasoning)
         if chunk.done:
             finish_reason = chunk.finish_reason or "stop"
             usage = chunk.usage
 
+    reasoning = "".join(reasoning_parts)
     return JSONResponse(
         {
             "model": body.model,
             "provider": provider.name,
             "content": "".join(parts),
+            # Absent pour un modèle classique, plutôt qu'une chaîne vide :
+            # le client sait ainsi distinguer « pas de raisonnement » de « vide ».
+            **({"reasoning": reasoning} if reasoning else {}),
             "finish_reason": finish_reason,
             "usage": usage,
             "duration_ms": round((time.perf_counter() - started) * 1000),
@@ -83,6 +90,8 @@ async def _event_stream(provider, body: ChatRequest, request: Request) -> AsyncI
             if await request.is_disconnected():
                 logger.info("Client déconnecté, arrêt du flux (%s)", body.model)
                 return
+            if chunk.reasoning:
+                yield sse_event({"reasoning": chunk.reasoning}, event="reasoning")
             if chunk.delta:
                 yield sse_event({"delta": chunk.delta}, event="delta")
             if chunk.done:

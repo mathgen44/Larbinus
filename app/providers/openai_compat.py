@@ -101,7 +101,17 @@ class OpenAICompatibleProvider(ChatProvider):
                     for choice in event.get("choices", []):
                         if choice.get("finish_reason"):
                             finish_reason = choice["finish_reason"]
-                        delta = (choice.get("delta") or {}).get("content")
+                        delta_obj = choice.get("delta") or {}
+
+                        # DeepSeek nomme ce champ `reasoning_content`,
+                        # OpenRouter `reasoning` : on accepte les deux.
+                        thinking = delta_obj.get("reasoning_content") or delta_obj.get(
+                            "reasoning"
+                        )
+                        if thinking:
+                            yield ChatChunk(reasoning=thinking)
+
+                        delta = delta_obj.get("content")
                         if delta:
                             yield ChatChunk(delta=delta)
         except httpx.HTTPError as exc:

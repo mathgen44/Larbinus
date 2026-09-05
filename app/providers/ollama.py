@@ -92,7 +92,15 @@ class OllamaProvider(ChatProvider):
                         )
                         return
 
-                    delta = (event.get("message") or {}).get("content", "")
+                    message = event.get("message") or {}
+
+                    # Les modèles de raisonnement (deepseek-r1…) renvoient leur
+                    # monologue interne dans un champ distinct du contenu.
+                    thinking = message.get("thinking")
+                    if thinking:
+                        yield ChatChunk(reasoning=thinking)
+
+                    delta = message.get("content", "")
                     if delta:
                         yield ChatChunk(delta=delta)
         except httpx.HTTPError as exc:

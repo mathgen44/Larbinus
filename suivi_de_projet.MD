@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 3 — API de chat (terminée, à valider en réel) → Phase 4 |
+| **Phase en cours** | Phase 4 — Interface web (phases 1 à 3 validées en production) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -141,8 +141,8 @@ Larbinus/
       dans `/api/models` au lieu de faire échouer l'appel
 - [x] `GET /api/models` (agrégation) et `GET /api/providers` (diagnostic par fournisseur)
 - [x] 17 tests au vert, transport HTTP simulé, aucun appel réseau
-- [ ] **Vérification en réel** : `GET /api/models` renvoie bien les modèles de
-      l'instance Ollama une fois le conteneur déployé
+- [x] **Vérification en réel** : conteneur déployé sur 192.168.0.40:8474, `/api/models`
+      renvoie bien les modèles de l'instance Ollama de 192.168.0.139
 
 ### Phase 3 — API de chat ✅ *terminée (validée par tests + serveur réel simulé)*
 
@@ -161,19 +161,27 @@ Larbinus/
       temps constant ; `/health` reste public pour le `HEALTHCHECK` Docker
 - [x] En-tête `X-Accel-Buffering: no` pour empêcher un reverse proxy Nginx de
       mettre le flux en tampon
-- [x] 27 tests au vert
+- [x] **Modèles de raisonnement** : `reasoning` séparé de `delta` dans `ChatChunk`,
+      lu depuis `message.thinking` (Ollama), `thinking_delta` (Anthropic) et
+      `reasoning_content` / `reasoning` (DeepSeek, OpenRouter) ; exposé en événement
+      SSE `reasoning`, en champ `reasoning` (non-streaming) et en `reasoning_content`
+      dans la couche OpenAI
+- [x] 35 tests au vert
 - [x] **Vérification** : serveur réel lancé contre un faux Ollama qui répond en 250 ms
       par mot — fragments reçus au fil de l'eau (+116, +365, +615 ms…), pas d'un bloc
 - [x] **Vérification** : le SDK officiel `openai` (celui qu'utilise n8n) dialogue avec
       Larbinus sans adaptateur, en streaming comme en non-streaming
-- [ ] **Vérification en réel** : `curl -N` contre l'instance Ollama et les API en ligne
-      une fois le conteneur déployé
+- [x] **Vérification en réel** : `curl -N` sur `/api/chat` contre l'Ollama réel —
+      réponse en flux, événement `done` avec compteurs de jetons et `duration_ms`
+- [ ] **Vérification en réel** : les trois fournisseurs en ligne (clés non encore renseignées)
 
 ### Phase 4 — Interface web
 
 - [ ] Page de chat statique, sans étape de build (HTML + JS vanilla)
 - [ ] Sélecteur fournisseur/modèle alimenté par `/api/models`
 - [ ] Rendu Markdown + blocs de code avec bouton copier
+- [ ] Bloc « Raisonnement » repliable, replié par défaut, alimenté par l'événement SSE
+      `reasoning` (indispensable pour `deepseek-r1:8b`)
 - [ ] Thème clair/sombre, mise en page responsive (utilisable au téléphone)
 - [ ] Indicateur de streaming et bouton « stop »
 - [ ] **Vérification** : conversation complète de bout en bout dans le navigateur
@@ -275,7 +283,20 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 
 | # | Date | Phase | Symptôme | Cause | Correction | État |
 |---|---|---|---|---|---|---|
-| — | — | — | *(aucun bug enregistré à ce jour)* | — | — | — |
+| 1 | 2026-09-05 | 3 | `{"detail":"Method Not Allowed"}` en ouvrant `/api/chat` dans un navigateur | **Faux bug.** `/api/chat` n'accepte que le POST ; la barre d'adresse d'un navigateur émet un GET → 405 | Aucune. Comportement attendu. Utiliser `/docs`, `/health` ou `/api/models` depuis un navigateur ; la page de chat de la phase 4 fera les POST | Clos |
+| 2 | 2026-09-05 | 2 | Le raisonnement de `deepseek-r1:8b` était purement perdu | Le provider Ollama ne lisait que `message.content` ; Ollama renvoie le monologue interne dans un champ **`thinking`** distinct (confirmé sur l'instance réelle) | Champ `reasoning` ajouté à `ChatChunk` et propagé jusqu'à l'API ; même traitement pour `thinking_delta` (Anthropic) et `reasoning_content` (DeepSeek, OpenRouter). 7 tests dédiés | Corrigé |
+
+### Points de vigilance observés en production
+
+- **GPU et contexte** : l'instance Ollama de 192.168.0.139 tourne sur une RTX 3070
+  (8 Go). Avec `CONTEXT 32768`, le cache KV réclame 3,2 Go — autant que le modèle —
+  et seules 26 couches sur 33 tiennent en VRAM (`23%/77% CPU/GPU`). Réduire
+  `OLLAMA_CONTEXT_LENGTH` (8192 → cache KV ~800 Mo) fait tenir le modèle entier.
+- **Mesures** : 39 s pour 24 jetons à froid (chargement du modèle inclus), 5,2 s pour
+  22 jetons à chaud (~4,2 jetons/s). Une 3070 en tout-GPU devrait plutôt donner
+  40 à 60 jetons/s sur un 7B quantifié — marge de progression restante.
+- **Deux modèles ne cohabitent pas** en 8 Go de VRAM : alterner entre `mistral` et
+  `deepseek-r1:8b` provoque un déchargement/rechargement à chaque bascule.
 
 ---
 
@@ -300,3 +321,6 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Une erreur survenant après le début du flux est émise en SSE, pas en code HTTP | Les en-têtes de la réponse sont déjà envoyés : renvoyer un 503 est impossible à ce stade |
 | 2026-09-05 | En-tête `X-Accel-Buffering: no` sur les réponses SSE | Sans lui, un reverse proxy Nginx (déjà présent dans le homelab) met le flux en tampon et le streaming devient invisible |
 | 2026-09-05 | Le premier fragment OpenAI porte `{"role": "assistant"}` | Certains clients, dont d'anciens nœuds n8n, l'attendent avant tout contenu |
+| 2026-09-05 | Raisonnement et réponse transportés dans deux champs distincts | Les fusionner est irréversible côté client ; l'interface doit pouvoir replier le monologue interne sans le confondre avec la réponse |
+| 2026-09-05 | Le champ `reasoning` est **absent** (et non vide) pour un modèle classique | Permet au client de distinguer « ce modèle ne raisonne pas » de « raisonnement vide » |
+| 2026-09-05 | Dans la couche OpenAI, le raisonnement passe par `reasoning_content` | Champ hors contrat OpenAI mais convention de fait chez DeepSeek et OpenRouter ; les clients stricts l'ignorent sans dommage |

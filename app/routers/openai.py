@@ -100,13 +100,22 @@ async def openai_chat_completions(request: Request, body: OpenAIChatRequest):
 
 async def _complete_openai(provider, internal: ChatRequest) -> JSONResponse:
     parts: list[str] = []
+    reasoning_parts: list[str] = []
     finish_reason, usage = "stop", {}
 
     async for chunk in provider.stream_chat(internal):
         parts.append(chunk.delta)
+        reasoning_parts.append(chunk.reasoning)
         if chunk.done:
             finish_reason = chunk.finish_reason or "stop"
             usage = chunk.usage
+
+    reasoning = "".join(reasoning_parts)
+    message: dict = {"role": "assistant", "content": "".join(parts)}
+    if reasoning:
+        # Champ hors contrat OpenAI, mais c'est la convention retenue par DeepSeek
+        # et OpenRouter ; les clients qui l'ignorent ne s'en portent pas plus mal.
+        message["reasoning_content"] = reasoning
 
     prompt_tokens = usage.get("prompt_tokens", 0)
     completion_tokens = usage.get("completion_tokens", 0)
@@ -117,11 +126,7 @@ async def _complete_openai(provider, internal: ChatRequest) -> JSONResponse:
             "created": int(time.time()),
             "model": internal.model,
             "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": "".join(parts)},
-                    "finish_reason": finish_reason,
-                }
+                {"index": 0, "message": message, "finish_reason": finish_reason}
             ],
             "usage": {
                 "prompt_tokens": prompt_tokens,
@@ -155,6 +160,8 @@ async def _stream_openai(provider, internal: ChatRequest, request: Request) -> A
             if await request.is_disconnected():
                 logger.info("Client déconnecté, arrêt du flux (%s)", internal.model)
                 return
+            if chunk.reasoning:
+                yield sse_event(envelope({"reasoning_content": chunk.reasoning}))
             if chunk.delta:
                 yield sse_event(envelope({"content": chunk.delta}))
             if chunk.done:
