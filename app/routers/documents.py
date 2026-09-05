@@ -17,14 +17,14 @@ from fastapi import (
 
 from app.rag.extraction import EXTENSIONS
 from app.rag.service import ServiceRag
-from app.security import require_api_key
+from app.security import require_api_key_ui
 
 logger = logging.getLogger("larbinus.documents")
 
 router = APIRouter(
     prefix="/api/documents",
     tags=["documents"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_api_key_ui)],
 )
 
 

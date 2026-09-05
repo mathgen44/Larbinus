@@ -27,9 +27,15 @@ class Settings(BaseSettings):
     # Le port publié sur le LAN est piloté par LARBINUS_PORT dans docker-compose.yml.
     internal_port: int = 8080
 
-    # Si renseignée, toutes les routes /api et /v1 exigent cette clé
-    # (en-tête `X-API-Key` ou `Authorization: Bearer <clé>`).
+    # Si renseignée, les routes /v1 (clients OpenAI, n8n, scripts) exigent
+    # cette clé, via `X-API-Key` ou `Authorization: Bearer <clé>`.
     larbinus_api_key: str | None = None
+
+    # Étend l'exigence de clé aux routes /api, donc à l'interface web
+    # elle-même. Laissé à faux, l'interface reste libre sur le LAN — et avec
+    # elle les documents indexés. À passer à vrai dès que Larbinus est exposé
+    # au-delà d'un réseau de confiance.
+    larbinus_protect_ui: bool = False
 
     # Origines autorisées pour le navigateur ; "*" en développement.
     cors_origins: str = "*"
@@ -68,6 +74,20 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 150
     max_document_bytes: int = 25 * 1024 * 1024
 
+    # --- Journalisation ---
+    #: « texte » pour un journal lisible à l'œil, « json » pour un journal
+    #: exploitable par un collecteur.
+    log_format: str = "texte"
+
+    # --- Limitation de débit ---
+    #: Requêtes autorisées par adresse et par fenêtre. 0 désactive.
+    rate_limit_requests: int = 120
+    rate_limit_window: int = 60
+
+    #: Adresses des reverse proxys autorisés à annoncer l'IP réelle du client
+    #: via `X-Forwarded-For`. Sans cette liste, l'en-tête est ignoré.
+    trusted_proxies: str = ""
+
     # --- Réseau ---
     request_timeout: float = 120.0
 
@@ -88,6 +108,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def trusted_proxy_set(self) -> set[str]:
+        return {p.strip() for p in self.trusted_proxies.split(",") if p.strip()}
 
 
 @lru_cache

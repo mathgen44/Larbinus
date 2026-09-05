@@ -1,0 +1,28 @@
+# Déploiement à partir de l'image publiée, sans compilation sur le serveur.
+#
+#   docker compose -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.ghcr.yml up -d
+#
+# Épinglez une version (`:0.1.0`) plutôt que `latest` si vous voulez maîtriser
+# le moment des mises à jour.
+
+services:
+  larbinus:
+    image: ghcr.io/mathgen44/larbinus:latest
+    container_name: larbinus
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${LARBINUS_PORT:-8474}:8080"
+    volumes:
+      - ./data:/data
+      - ./documents:/documents
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

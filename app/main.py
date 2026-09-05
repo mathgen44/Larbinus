@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+from app.middleware import ContexteRequete, JournalJson, LimitationDebit
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
 from app.rag.depot import DepotDocuments
@@ -26,10 +27,21 @@ from app.storage.db import Database
 
 settings = get_settings()
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)-8s %(name)s | %(message)s",
-)
+def _configurer_journal() -> None:
+    """Journal en texte lisible, ou en JSON si LOG_FORMAT=json."""
+    sortie = logging.StreamHandler()
+    if settings.log_format.lower() == "json":
+        sortie.setFormatter(JournalJson())
+    else:
+        sortie.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-8s %(name)s | %(message)s")
+        )
+    racine = logging.getLogger()
+    racine.handlers = [sortie]
+    racine.setLevel(getattr(logging, settings.log_level.upper(), logging.INFO))
+
+
+_configurer_journal()
 logger = logging.getLogger("larbinus")
 
 
@@ -64,6 +76,19 @@ async def lifespan(app: FastAPI):
             "ou une clé d'API dans le fichier .env."
         )
     logger.info("Données persistées dans %s", settings.data_dir)
+    if settings.larbinus_api_key:
+        portee = "toutes les routes" if settings.larbinus_protect_ui else "les routes /v1"
+        logger.info("Clé d'API exigée sur %s", portee)
+    else:
+        logger.warning(
+            "Aucune clé d'API : Larbinus est ouvert à toute machine pouvant "
+            "l'atteindre. Acceptable sur un LAN de confiance seulement."
+        )
+    if settings.rate_limit_requests > 0:
+        logger.info(
+            "Limitation de débit : %s requêtes / %s s par adresse",
+            settings.rate_limit_requests, settings.rate_limit_window,
+        )
 
     try:
         yield
@@ -92,6 +117,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# L'ordre compte, et il est contre-intuitif : le **dernier** ajouté est le plus
+# extérieur, donc le premier traversé. `ContexteRequete` doit donc être ajouté
+# en dernier pour envelopper la limitation de débit — sans quoi un rejet 429
+# repartirait sans identifiant de requête ni ligne de journal d'accès.
+app.add_middleware(
+    LimitationDebit,
+    limite=settings.rate_limit_requests,
+    fenetre=settings.rate_limit_window,
+    proxys=settings.trusted_proxy_set,
+)
+app.add_middleware(ContexteRequete)
 
 
 @app.exception_handler(ProviderError)

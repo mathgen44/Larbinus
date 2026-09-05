@@ -224,13 +224,15 @@ def cle_activee():
 
 
 def test_cle_exigee_quand_configuree(cle_activee):
+    """Depuis la phase 8, la clé garde /v1 ; l'interface reste libre sur le LAN
+    tant que LARBINUS_PROTECT_UI n'est pas activé (voir tests/test_securite.py)."""
     with TestClient(app) as client:
         app.state.registry = registry_ollama()
-        assert client.get("/api/models").status_code == 401
+        assert client.get("/v1/models").status_code == 401
         assert (
-            client.get("/api/models", headers={"X-API-Key": "mauvaise"}).status_code == 401
+            client.get("/v1/models", headers={"X-API-Key": "mauvaise"}).status_code == 401
         )
-        assert client.get("/api/models", headers={"X-API-Key": "secret"}).status_code == 200
+        assert client.get("/v1/models", headers={"X-API-Key": "secret"}).status_code == 200
         # Les clients OpenAI envoient un Bearer : il doit être accepté aussi.
         assert (
             client.get(
@@ -238,6 +240,8 @@ def test_cle_exigee_quand_configuree(cle_activee):
             ).status_code
             == 200
         )
+        # L'interface, elle, continue de répondre sans clé.
+        assert client.get("/api/models").status_code == 200
 
 
 def test_health_reste_public(cle_activee):

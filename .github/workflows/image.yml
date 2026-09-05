@@ -1,0 +1,94 @@
+name: Image Docker
+
+# Construit et publie l'image sur GitHub Container Registry.
+# Le serveur n'a alors plus qu'à faire `docker compose pull && docker compose up -d`,
+# au lieu de recompiler à chaque mise à jour.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRE: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements-dev.txt
+
+      - name: Lancer les tests
+        run: pytest -q
+        env:
+          DATA_DIR: ./data
+
+  publier:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Authentification sur GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRE }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Étiquettes et métadonnées
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRE }}/${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Construire et publier
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Le cache accéléré par GitHub évite de réinstaller les dépendances
+          # Python à chaque poussée.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Vérifier que l'image démarre
+        run: |
+          docker run --rm -d --name larbinus-verif -p 8474:8080 \
+            -e DATA_DIR=/tmp/data ${{ env.REGISTRE }}/${{ env.IMAGE }}:sha-$(git rev-parse --short HEAD)
+          for tentative in $(seq 1 20); do
+            if curl -sf http://localhost:8474/health > /dev/null; then
+              echo "L'image répond sur /health"
+              docker logs larbinus-verif
+              docker stop larbinus-verif
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "L'image n'a pas répondu dans le délai imparti"
+          docker logs larbinus-verif
+          exit 1

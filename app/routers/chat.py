@@ -31,13 +31,13 @@ from app.providers.registry import ProviderRegistry
 from app.rag.depot import IndexIncoherent
 from app.rag.embeddings import EmbeddingIndisponible
 from app.schemas import ChatMessage, ChatRequest
-from app.security import require_api_key
+from app.security import require_api_key_ui
 from app.storage.db import Database
 from app.streaming import SSE_HEADERS, sse_event
 
 logger = logging.getLogger("larbinus.chat")
 
-router = APIRouter(prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key_ui)])
 
 
 async def _documents_actifs(request: Request, body: ChatRequest, conversation: dict | None) -> bool:

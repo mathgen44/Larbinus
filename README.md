@@ -161,6 +161,56 @@ Mise à jour ultérieure :
 cd /opt/larbinus && git pull && docker compose up -d --build
 ```
 
+## Sécurité et exploitation
+
+**Clé d'API.** `LARBINUS_API_KEY` protège les routes `/v1` — celles qu'appellent
+n8n, les scripts et les SDK OpenAI. L'interface web (`/api`) reste accessible
+sans clé : un navigateur ne peut pas en présenter une sans écran de saisie.
+C'est confortable sur un LAN de confiance, mais **cela signifie que toute
+machine du réseau peut lire vos documents indexés**. Dès que Larbinus dépasse ce
+cadre, passez `LARBINUS_PROTECT_UI=true` : la clé est alors exigée partout.
+
+**Limitation de débit.** `RATE_LIMIT_REQUESTS` requêtes par adresse et par
+`RATE_LIMIT_WINDOW` secondes (120/60 par défaut, `0` désactive). Le but premier
+est qu'un script parti en boucle ne vide pas un quota d'API payante. `/health`
+et les fichiers statiques en sont exemptés — bloquer la sonde ferait redémarrer
+le conteneur en boucle.
+
+**Derrière un reverse proxy**, déclarez son adresse dans `TRUSTED_PROXIES` :
+
+```ini
+TRUSTED_PROXIES=172.18.0.1
+```
+
+Sans cela, `X-Forwarded-For` est ignoré et toutes les requêtes sont comptées
+comme venant du proxy. L'en-tête n'est jamais cru d'une source non déclarée,
+faute de quoi n'importe qui contournerait la limitation en le falsifiant.
+
+Côté Nginx Proxy Manager, pensez à désactiver la mise en tampon pour que le
+streaming fonctionne (Larbinus envoie déjà `X-Accel-Buffering: no`) et à porter
+le délai de lecture au-delà du temps de génération le plus long :
+
+```nginx
+proxy_buffering off;
+proxy_read_timeout 300s;
+```
+
+**Journaux.** `LOG_FORMAT=json` produit une ligne JSON par événement, avec
+identifiant de requête, méthode, chemin, statut et durée — exploitable par un
+collecteur. `LOG_FORMAT=texte` (défaut) reste lisible à l'œil. Chaque réponse
+porte un en-tête `X-Request-ID` ; un identifiant fourni en amont est conservé,
+ce qui permet de suivre une requête d'un service à l'autre.
+
+## Déploiement depuis l'image publiée
+
+Chaque poussée sur `main` construit l'image, la teste et la publie sur GHCR.
+Le serveur n'a alors plus à compiler :
+
+```bash
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
 ## Développement sans Docker
 
 ```bash

@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, Request
 
 from app.providers.registry import ProviderRegistry
 from app.schemas import ModelInfo, ProviderStatus
-from app.security import require_api_key
+from app.security import require_api_key_ui
 
-router = APIRouter(prefix="/api", tags=["modèles"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/api", tags=["modèles"], dependencies=[Depends(require_api_key_ui)])
 
 
 @router.get("/models", response_model=list[ModelInfo])

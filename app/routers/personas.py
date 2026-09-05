@@ -12,13 +12,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app.security import require_api_key
+from app.security import require_api_key_ui
 from app.storage.db import Database
 
 router = APIRouter(
     prefix="/api/personas",
     tags=["personas"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_api_key_ui)],
 )
 
 

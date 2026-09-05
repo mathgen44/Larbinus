@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 7 terminée (à valider en réel) → Phase 8 (sécurité, déploiement) |
+| **Phase en cours** | Phase 8 terminée (à valider en réel) → Phase 9 (qualité, documentation) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -33,6 +33,7 @@ correction. Toute décision d'architecture qui change le cap va dans le § 8.
 | Documents RAG | PDF, Markdown/texte, Word, Excel, HTML | 2026-09-05 |
 | Ingestion | Dépôt dans l'interface **et** dossier surveillé monté dans le conteneur | 2026-09-05 |
 | Stockage vectoriel | SQLite + `sqlite-vec`, avec repli en Python | 2026-09-05 |
+| Portée de la clé d'API | `/v1` seulement ; l'interface reste libre sur le LAN (`LARBINUS_PROTECT_UI` pour tout fermer) | 2026-09-05 |
 
 **Pourquoi Python/FastAPI** : écosystème IA le plus riche (SDK officiels des quatre
 fournisseurs, briques RAG matures), streaming SSE natif et simple, image finale légère
@@ -199,8 +200,7 @@ Larbinus/
 - [x] **Vérification** : parcours complet automatisé dans un vrai Chromium — envoi,
       streaming, raisonnement replié, liste, bloc de code, lien, bouton stop visible
       pendant la génération, aucune erreur console, en thème clair, sombre et mobile
-- [ ] **Vérification en réel** : ouvrir `http://192.168.0.40:8474/` et converser avec
-      `deepseek-r1:8b`
+- [x] **Vérification en réel** : interface utilisée sur `http://192.168.0.40:8474/`
 
 ### Phase 5 — Persistance ✅ *terminée (validée par tests + navigateur)*
 
@@ -222,8 +222,8 @@ Larbinus/
 - [x] **Vérification navigateur** : deux messages, rechargement complet de la page,
       reprise du fil (4 messages et 2 blocs de raisonnement retrouvés), renommage,
       suppression, tiroir mobile — aucune erreur console
-- [ ] **Vérification en réel** : redémarrer le conteneur et vérifier que l'historique
-      survit dans `./data/larbinus.db`
+- [x] **Vérification en réel** : historique conservé dans `./data/larbinus.db`
+      d'un redéploiement à l'autre
 
 ### Phase 6 — Personas (« larbins ») ✅ *terminée (validée par tests + navigateur)*
 
@@ -250,8 +250,8 @@ Larbinus/
 - [x] **Vérification navigateur** : choix d'un larbin, prompt et température
       appliqués, conversation créée avec le bon persona, CRUD dans la modale,
       aucune erreur console
-- [ ] **Vérification en réel** : `git pull` sur 192.168.0.40 — la base existante doit
-      se migrer seule au redémarrage, sans perdre les conversations de la phase 5
+- [x] **Vérification en réel** : migrations v2, v3 et v4 appliquées en production
+      sur la base existante, sans perte
 
 ### Phase 7a — Socle documentaire ✅ *terminée (validée par tests)*
 
@@ -270,6 +270,9 @@ Larbinus/
       versions anciennes) ou API compatible OpenAI, par paquets de 32
 - [x] Index `sqlite-vec` dans la base existante, **avec repli en similarité
       cosinus calculée en Python** si l'extension ne peut pas être chargée
+- [x] **Confirmé en production** : `sqlite-vec` se charge bien dans l'image
+      `python:3.12-slim` — `Index vectoriel : sqlite-vec, dimension 768`.
+      Le repli n'a donc pas à servir, mais reste le filet de sécurité
 - [x] Dimension et modèle d'embedding enregistrés : changer de modèle est
       détecté et signalé au lieu de produire des résultats faux
 - [x] Empreinte SHA-256 unique : déposer deux fois le même fichier ne crée pas
@@ -315,17 +318,35 @@ Larbinus/
       activation de la bascule, question dont la réponse n'existe que dans les
       documents, sources affichées avant la fin de la réponse, réglage et
       sources retrouvés après rechargement — aucune erreur console
-- [ ] **Vérification en réel** : `ollama pull nomic-embed-text`, déposer un
-      document et poser une question dont la réponse n'est que dedans
+- [x] **Vérification en réel** : `nomic-embed-text` installé sur 192.168.0.139,
+      documents déposés et indexés depuis l'interface — validé par Hervé
 
-### Phase 8 — Sécurité & mise en production homelab
+### Phase 8 — Sécurité & mise en production ✅ *terminée (tests + serveur réel)*
 
-- [ ] Authentification simple de l'API (jeton `X-API-Key`) activable par `.env`
-- [ ] CORS restreint, limitation de débit basique
-- [ ] Logs structurés, niveau réglable
-- [ ] Reverse proxy (Traefik/NPM) + HTTPS, documenté dans le README
-- [ ] Publication de l'image (GHCR) via GitHub Actions
-- [ ] **Vérification** : déploiement à partir du seul `docker-compose.yml` + `.env`
+- [x] `LARBINUS_API_KEY` exigée sur `/v1` (n8n, scripts, SDK OpenAI) ;
+      l'interface `/api` reste libre — **choix assumé d'un LAN de confiance**
+- [x] `LARBINUS_PROTECT_UI=true` étend l'exigence à l'interface, pour le jour
+      où Larbinus sortira du réseau local
+- [x] `/health` et `/` restent publics quoi qu'il arrive : la sonde Docker ne
+      doit jamais dépendre d'une clé
+- [x] Limitation de débit glissante par adresse, en mémoire (pas de Redis pour
+      un conteneur unique) ; `/health` et les fichiers statiques exemptés
+- [x] `X-Forwarded-For` n'est cru que d'un proxy déclaré dans `TRUSTED_PROXIES` —
+      sinon la limitation se contourne en falsifiant un en-tête
+- [x] En-têtes `Retry-After`, `X-RateLimit-Limit` et `X-RateLimit-Remaining`
+- [x] Identifiant de requête sur chaque réponse (`X-Request-ID`), conservé s'il
+      vient d'un service amont ; journal d'accès avec méthode, statut et durée
+- [x] `LOG_FORMAT=json` pour un journal exploitable par un collecteur
+- [x] GitHub Actions : tests, construction, publication sur GHCR, **puis
+      démarrage de l'image publiée pour vérifier qu'elle répond sur `/health`**
+- [x] `docker-compose.ghcr.yml` pour déployer sans compiler sur le serveur
+- [x] README : portée de la clé, réglages de proxy, `proxy_buffering off`
+- [x] 101 tests au vert
+- [x] **Vérification sur serveur réel** : 5 appels passent puis 429 avec
+      `Retry-After`, `/v1` refuse sans clé et accepte avec, `/api` reste
+      ouverte, le rejet 429 porte bien un identifiant et une ligne de journal
+- [ ] **Vérification en réel** : premier `docker compose pull` depuis GHCR
+      après la première poussée sur `main`
 
 ### Phase 9 — Qualité & documentation
 
@@ -398,6 +419,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 6 | 2026-09-05 | 7 | `Ollama a répondu 404 : model "nomic-embed-text" not found` au dépôt d'un document | Le modèle d'embedding n'était pas installé sur l'instance Ollama | `ollama pull nomic-embed-text`. Message d'erreur déjà explicite, conservé tel quel | Clos |
 | 7 | 2026-09-05 | 7 | Un document déposé dont l'indexation échoue ne pouvait pas être réessayé | Les octets du fichier n'étaient pas conservés : seul le dossier surveillé était relisible | Les fichiers déposés sont rangés sous `DATA_DIR/depots/<empreinte>` ; réindexation unitaire et bouton « Réessayer les échecs » ajoutés ; le fichier est supprimé avec le document | Corrigé |
 | 8 | 2026-09-05 | 7 | Deux tests de recherche échouaient une fois sur deux | Le double de test vectorisait avec `hash()`, randomisé à chaque processus : le classement des résultats variait d'une exécution à l'autre | Remplacé par `zlib.crc32`, déterministe ; suite relancée trois fois pour le vérifier | Corrigé |
+| 9 | 2026-09-05 | 8 | Une requête rejetée en 429 repartait sans identifiant ni ligne de journal d'accès | Ordre des intergiciels inversé : dans Starlette le **dernier** ajouté est le plus extérieur, or la limitation de débit avait été ajoutée en dernier | `ContexteRequete` ajouté après `LimitationDebit`, donc au-dessus ; test dédié reproduisant l'ordre de `main.py` | Corrigé |
 
 ### Points de vigilance observés en production
 
@@ -463,3 +485,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Une recherche documentaire en panne n'interrompt pas la conversation | Un service d'embeddings arrêté doit dégrader la réponse, pas empêcher de discuter |
 | 2026-09-05 | Le code a son propre lecteur, distinct du Markdown | Un `#` en Python ou en YAML est un commentaire, pas un titre ; et l'indentation porte la structure, la normaliser rendrait les extraits inutilisables |
 | 2026-09-05 | Les fichiers déposés sont conservés sur disque | Sans eux, un échec d'indexation est irrattrapable : l'utilisateur doit tout redéposer, alors que la panne était passagère |
+| 2026-09-05 | La clé d'API ne garde que `/v1`, l'interface reste libre | Choix de Hervé : le LAN est de confiance, et un navigateur ne peut pas porter de clé sans écran de saisie. Le risque — documents indexés lisibles par toute machine du réseau — est explicite dans le README, et `LARBINUS_PROTECT_UI` permet de fermer |
+| 2026-09-05 | Limitation de débit en mémoire, sans Redis | Un conteneur unique : le compteur repart à zéro au redémarrage, sans conséquence pour l'objectif visé |
+| 2026-09-05 | `X-Forwarded-For` n'est cru que d'un proxy déclaré | Un en-tête librement falsifiable transformerait la limitation en simple décoration |
+| 2026-09-05 | Le workflow GHCR démarre l'image publiée avant de la déclarer bonne | Une image qui se construit n'est pas une image qui fonctionne ; le `/health` le prouve |
