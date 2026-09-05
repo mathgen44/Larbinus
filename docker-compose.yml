@@ -1,0 +1,22 @@
+services:
+  larbinus:
+    build: .
+    image: larbinus:0.1.0
+    container_name: larbinus
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # LARBINUS_PORT = port publié sur le LAN ; 8080 = port interne, fixe.
+      - "${LARBINUS_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    extra_hosts:
+      # Permet d'atteindre un Ollama installé sur l'hôte via http://host.docker.internal:11434
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -8,7 +8,8 @@
 |---|---|
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
-| **Phase en cours** | Phase 0 — Cadrage |
+| **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8080` |
+| **Phase en cours** | Phase 1 — Socle conteneur (à valider par `docker compose up -d`) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -27,6 +28,7 @@ correction. Toute décision d'architecture qui change le cap va dans le § 8.
 | Fonctions v1+ | Historique persisté, personas/prompts système, RAG documents locaux | 2026-09-05 |
 | Déploiement | Image unique, `docker compose up -d`, config par `.env` | 2026-09-05 |
 | API compatible OpenAI | **Oui** — `/v1/chat/completions` et `/v1/models` en plus de l'API native | 2026-09-05 |
+| Licence | MIT | 2026-09-05 |
 
 **Pourquoi Python/FastAPI** : écosystème IA le plus riche (SDK officiels des quatre
 fournisseurs, briques RAG matures), streaming SSE natif et simple, image finale légère
@@ -51,7 +53,7 @@ fournisseurs, briques RAG matures), streaming SSE natif et simple, image finale 
                     │   └── /  (UI statique)      │
                     │                             │
                     │  Couche « providers »       │
-                    │   ├── ollama                │──▶ http://beast:11434
+                    │   ├── ollama                │──▶ http://192.168.0.139:11434 (configurable)
                     │   ├── openai-compatible     │──▶ api.openai.com / OpenRouter / vLLM
                     │   ├── anthropic             │──▶ api.anthropic.com
                     │   └── mistral               │──▶ api.mistral.ai
@@ -97,24 +99,29 @@ Larbinus/
 
 ## 3. Feuille de route
 
-### Phase 0 — Cadrage & initialisation ⏳ *en cours*
+### Phase 0 — Cadrage & initialisation ✅ *terminée*
 
 - [x] Définir interface, fournisseurs, stack et périmètre fonctionnel
 - [x] Rédiger ce fichier de suivi
-- [ ] Initialiser le dépôt local (`git init` + remote `origin`) — le dépôt distant est
+- [x] Initialiser le dépôt local (`git init` + remote `origin`) — le dépôt distant est
       volontairement vide, les fichiers seront poussés une fois prêts
 - [x] Ajouter `.gitignore` (`.env`, `__pycache__/`, `data/`, `*.db`)
-- [ ] Choisir la licence et compléter le `README.md`
+- [x] Rédiger le `README.md` (démarrage rapide, configuration, développement local)
+- [x] Choisir la licence : **MIT**, fichier `LICENSE` ajouté
 
-### Phase 1 — Socle conteneur
+### Phase 1 — Socle conteneur ⏳ *en cours*
 
-- [ ] `requirements.txt` (fastapi, uvicorn, httpx, pydantic-settings)
-- [ ] `app/config.py` : lecture des variables d'environnement, aucun secret en dur
-- [ ] `app/main.py` minimal : `GET /health` renvoyant `{"status":"ok","version":...}`
-- [ ] `Dockerfile` multi-stage, utilisateur non-root, `HEALTHCHECK`
-- [ ] `docker-compose.yml` : port exposé, volume `./data`, `restart: unless-stopped`
-- [ ] `.env.example` documenté
-- [ ] **Vérification** : `docker compose up -d` puis `/health` répond depuis le LAN
+- [x] `requirements.txt` (fastapi, uvicorn, httpx, pydantic-settings) + `requirements-dev.txt`
+- [x] `app/config.py` : lecture des variables d'environnement, aucun secret en dur ;
+      propriété `enabled_providers` qui désactive tout fournisseur non configuré
+- [x] `app/main.py` : `GET /health` renvoyant statut, version et fournisseurs actifs ;
+      `GET /` de courtoisie ; CORS configurable ; création du `DATA_DIR` au démarrage
+- [x] `Dockerfile` multi-stage (venv), utilisateur non-root `larbinus` (uid 1000), `HEALTHCHECK`
+- [x] `docker-compose.yml` : port publié configurable, volume `./data`,
+      `restart: unless-stopped`, alias `host.docker.internal` pour un Ollama sur l'hôte
+- [x] `.env.example` documenté
+- [x] `tests/test_health.py` — 3 tests de fumée, tous au vert
+- [ ] **Vérification** : `docker compose up -d --build` puis `/health` répond depuis le LAN
 
 ### Phase 2 — Couche fournisseurs
 
@@ -220,9 +227,9 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 
 ## 6. Questions ouvertes
 
-- [ ] Adresse exacte de l'instance Ollama du homelab (VM GPU sur *beast* ?)
 - [ ] Nom d'hôte / sous-domaine souhaité derrière le reverse proxy
 - [ ] Faut-il une limite de dépense ou un compteur de coût pour les API payantes ?
+- [ ] Larbinus doit-il aussi savoir *piloter* Ollama (télécharger un modèle, le décharger) ?
 
 ---
 
@@ -245,3 +252,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Python + FastAPI plutôt que Node | Écosystème IA, SDK officiels, RAG plus simple |
 | 2026-09-05 | RAG repoussé en phase 7 | Livrer d'abord un chat multi-fournisseurs utilisable |
 | 2026-09-05 | Ajout d'une API compatible OpenAI (`/v1/*`) dès la phase 3 | Utilisable tel quel par n8n, Open WebUI et tout client existant ; bien plus coûteux à greffer après coup |
+| 2026-09-05 | Port interne figé à 8080, `LARBINUS_PORT` ne pilote que la publication sur le LAN | Évite la double source de vérité entre l'app, le `HEALTHCHECK` et le mapping compose |
+| 2026-09-05 | Alias `host.docker.internal` déclaré dans le compose | Permet d'atteindre un Ollama installé sur l'hôte sans mode `network_host` |
+| 2026-09-05 | Licence MIT, détenteur `mathgen44` | Projet ouvert et réutilisable ; le dépôt n'utilise que le pseudo, jamais le nom civil |
+| 2026-09-05 | Aucune adresse d'Ollama codée en dur, uniquement des exemples commentés dans `.env.example` | Le projet doit rester déployable par d'autres utilisateurs avec leur propre infrastructure |
