@@ -16,6 +16,7 @@ from app.providers.registry import ProviderRegistry
 from app.routers import chat as chat_router
 from app.routers import conversations as conversations_router
 from app.routers import models as models_router
+from app.routers import personas as personas_router
 from app.routers import openai as openai_router
 from app.storage.db import Database
 
@@ -135,4 +136,5 @@ async def root():
 app.include_router(models_router.router)   # /api/models, /api/providers
 app.include_router(chat_router.router)     # /api/chat
 app.include_router(conversations_router.router)  # /api/conversations
+app.include_router(personas_router.router)       # /api/personas
 app.include_router(openai_router.router)   # /v1/chat/completions, /v1/models

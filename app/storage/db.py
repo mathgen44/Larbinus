@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger("larbinus.db")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -52,6 +52,72 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation
 CREATE INDEX IF NOT EXISTS idx_conversations_updated
     ON conversations(updated_at DESC);
 """
+
+# Migrations appliquées en séquence selon `PRAGMA user_version`.
+# Chaque entrée doit rester rejouable sur une base contenant déjà des données :
+# une instance déployée ne doit jamais avoir à repartir de zéro.
+MIGRATIONS: dict[int, list[str]] = {
+    2: [
+        """
+        CREATE TABLE IF NOT EXISTS personas (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            description TEXT,
+            system      TEXT,
+            model       TEXT,
+            temperature REAL,
+            icon        TEXT,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+        """,
+        "ALTER TABLE conversations ADD COLUMN persona_id TEXT",
+        "ALTER TABLE conversations ADD COLUMN temperature REAL",
+    ],
+}
+
+#: Personas d'exemple, insérés une seule fois à la migration. Supprimés par
+#: l'utilisateur, ils ne reviennent pas.
+PERSONAS_EXEMPLE = [
+    {
+        "name": "Assistant",
+        "icon": "🙂",
+        "description": "Polyvalent, répond en français, va droit au but.",
+        "system": "Tu es un assistant francophone. Réponds de façon claire et concise, "
+                  "sans préambule ni formule de politesse superflue. Si une question est "
+                  "ambiguë, demande une précision plutôt que de deviner.",
+        "temperature": 0.7,
+    },
+    {
+        "name": "Développeur",
+        "icon": "⌨",
+        "description": "Code commenté, explications courtes, pièges signalés.",
+        "system": "Tu es un développeur expérimenté. Donne du code complet et exécutable, "
+                  "commenté seulement là où l'intention n'est pas évidente. Signale les "
+                  "pièges et les cas limites. Pas de longues introductions.",
+        "temperature": 0.2,
+    },
+    {
+        "name": "Homelab",
+        "icon": "🖧",
+        "description": "Docker, Proxmox, réseau — commandes prêtes à coller.",
+        "system": "Tu es administrateur système, spécialiste Docker, Docker Swarm, Proxmox "
+                  "et réseau domestique. Donne des commandes prêtes à exécuter, précise sur "
+                  "quelle machine les lancer, et explique brièvement ce que fait chacune. "
+                  "Signale ce qui est destructif avant de le proposer.",
+        "temperature": 0.3,
+    },
+    {
+        "name": "Traducteur",
+        "icon": "🌐",
+        "description": "Traduit sans commenter, en respectant le registre.",
+        "system": "Tu traduis le texte qu'on te donne, sans le commenter ni l'expliquer. "
+                  "Respecte le registre, le ton et la mise en forme de l'original. Si la "
+                  "langue cible n'est pas précisée, traduis vers le français, ou vers "
+                  "l'anglais si le texte est déjà en français.",
+        "temperature": 0.3,
+    },
+]
 
 TITRE_PAR_DEFAUT = "Nouvelle conversation"
 
@@ -87,11 +153,43 @@ class Database:
         conn.executescript(SCHEMA)
 
         version = conn.execute("PRAGMA user_version").fetchone()[0]
+        for cible in sorted(MIGRATIONS):
+            if version < cible:
+                logger.info("Migration du schéma vers la version %s", cible)
+                for instruction in MIGRATIONS[cible]:
+                    try:
+                        conn.execute(instruction)
+                    except sqlite3.OperationalError as erreur:
+                        # Une colonne déjà présente n'est pas une erreur : la
+                        # migration doit rester rejouable.
+                        if "duplicate column name" not in str(erreur):
+                            raise
+                if cible == 2:
+                    self._semer_personas(conn)
+
         if version < SCHEMA_VERSION:
             conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-            logger.info("Schéma de la base initialisé en version %s", SCHEMA_VERSION)
+            logger.info("Schéma de la base en version %s", SCHEMA_VERSION)
         conn.commit()
         return conn
+
+    @staticmethod
+    def _semer_personas(conn: sqlite3.Connection) -> None:
+        if conn.execute("SELECT COUNT(*) FROM personas").fetchone()[0]:
+            return
+        horodatage = maintenant()
+        for exemple in PERSONAS_EXEMPLE:
+            conn.execute(
+                """
+                INSERT INTO personas (id, name, description, system, model,
+                                      temperature, icon, created_at, updated_at)
+                VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)
+                """,
+                (uuid.uuid4().hex, exemple["name"], exemple["description"],
+                 exemple["system"], exemple["temperature"], exemple["icon"],
+                 horodatage, horodatage),
+            )
+        logger.info("%d personas d'exemple insérés", len(PERSONAS_EXEMPLE))
 
     async def connect(self) -> None:
         self._conn = await asyncio.to_thread(self._ouvrir)
@@ -178,16 +276,21 @@ class Database:
         titre: str | None = None,
         modele: str | None = None,
         systeme: str | None = None,
+        persona_id: str | None = None,
+        temperature: float | None = None,
     ) -> dict:
         identifiant = uuid.uuid4().hex
         horodatage = maintenant()
 
         def action(conn):
             conn.execute(
-                "INSERT INTO conversations (id, title, model, system, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
+                """
+                INSERT INTO conversations (id, title, model, system, persona_id,
+                                           temperature, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (identifiant, titre or TITRE_PAR_DEFAUT, modele, systeme,
-                 horodatage, horodatage),
+                 persona_id, temperature, horodatage, horodatage),
             )
 
         await self._ecrire(action)
@@ -196,13 +299,15 @@ class Database:
             "title": titre or TITRE_PAR_DEFAUT,
             "model": modele,
             "system": systeme,
+            "persona_id": persona_id,
+            "temperature": temperature,
             "created_at": horodatage,
             "updated_at": horodatage,
             "message_count": 0,
         }
 
     async def modifier_conversation(self, identifiant: str, **champs) -> dict | None:
-        autorises = {"title", "model", "system"}
+        autorises = {"title", "model", "system", "temperature"}
         mises_a_jour = {k: v for k, v in champs.items() if k in autorises and v is not None}
         if not mises_a_jour:
             return await self.conversation(identifiant)
@@ -264,3 +369,74 @@ class Database:
             return curseur.lastrowid
 
         return await self._ecrire(action)
+
+    # -- personas ---------------------------------------------------------- #
+    async def liste_personas(self) -> list[dict]:
+        lignes = await self._lire("SELECT * FROM personas ORDER BY name COLLATE NOCASE")
+        return [dict(ligne) for ligne in lignes]
+
+    async def persona(self, identifiant: str) -> dict | None:
+        lignes = await self._lire("SELECT * FROM personas WHERE id = ?", (identifiant,))
+        return dict(lignes[0]) if lignes else None
+
+    async def creer_persona(self, **champs) -> dict:
+        identifiant = uuid.uuid4().hex
+        horodatage = maintenant()
+        valeurs = (
+            identifiant,
+            champs["name"],
+            champs.get("description"),
+            champs.get("system"),
+            champs.get("model"),
+            champs.get("temperature"),
+            champs.get("icon"),
+            horodatage,
+            horodatage,
+        )
+
+        def action(conn):
+            conn.execute(
+                """
+                INSERT INTO personas (id, name, description, system, model,
+                                      temperature, icon, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                valeurs,
+            )
+
+        await self._ecrire(action)
+        return await self.persona(identifiant)
+
+    async def modifier_persona(self, identifiant: str, **champs) -> dict | None:
+        autorises = {"name", "description", "system", "model", "temperature", "icon"}
+        # `is not None` seulement : une description vidée volontairement doit
+        # pouvoir être enregistrée, d'où l'usage d'une chaîne vide côté client.
+        mises_a_jour = {k: v for k, v in champs.items() if k in autorises and v is not None}
+        if not mises_a_jour:
+            return await self.persona(identifiant)
+
+        mises_a_jour["updated_at"] = maintenant()
+        affectation = ", ".join(f"{k} = ?" for k in mises_a_jour)
+
+        def action(conn):
+            conn.execute(
+                f"UPDATE personas SET {affectation} WHERE id = ?",
+                (*mises_a_jour.values(), identifiant),
+            )
+
+        await self._ecrire(action)
+        return await self.persona(identifiant)
+
+    async def supprimer_persona(self, identifiant: str) -> bool:
+        def action(conn):
+            # Les conversations déjà créées gardent leur propre copie du prompt :
+            # on se contente de couper le lien.
+            conn.execute(
+                "UPDATE conversations SET persona_id = NULL WHERE persona_id = ?",
+                (identifiant,),
+            )
+            return conn.execute(
+                "DELETE FROM personas WHERE id = ?", (identifiant,)
+            ).rowcount
+
+        return bool(await self._ecrire(action))

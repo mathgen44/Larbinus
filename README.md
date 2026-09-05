@@ -53,6 +53,12 @@ L'interface de chat est servie à la racine : **http://localhost:8474/**
 qui en produisent, historique des conversations, thème clair/sombre, utilisable
 au téléphone).
 
+Les **larbins** sont des assistants préconfigurés (prompt système, modèle et
+température par défaut). Quatre exemples sont fournis — Assistant, Développeur,
+Homelab, Traducteur — modifiables et supprimables depuis l'interface. Démarrer une
+conversation depuis un larbin copie ses réglages : le modifier ensuite ne réécrit
+pas les conversations passées.
+
 Les conversations sont enregistrées dans `data/larbinus.db` (SQLite) : elles
 survivent au redémarrage du conteneur et peuvent être exportées en Markdown ou
 en JSON depuis l'interface comme depuis l'API.

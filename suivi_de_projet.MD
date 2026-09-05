@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 5 terminée (à valider en réel) → Phase 6 |
+| **Phase en cours** | Phase 6 terminée (à valider en réel) → Phase 7 (RAG) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -222,12 +222,29 @@ Larbinus/
 - [ ] **Vérification en réel** : redémarrer le conteneur et vérifier que l'historique
       survit dans `./data/larbinus.db`
 
-### Phase 6 — Personas (« larbins »)
+### Phase 6 — Personas (« larbins ») ✅ *terminée (validée par tests + navigateur)*
 
-- [ ] Table `personas` : nom, prompt système, fournisseur/modèle par défaut, paramètres
-- [ ] CRUD API + écran de gestion dans l'UI
-- [ ] Personas préchargés à titre d'exemple (rédaction, code, traduction, homelab)
-- [ ] **Vérification** : ouvrir une conversation depuis un persona applique bien ses réglages
+- [x] **Migration de schéma** v1 → v2 rejouable : table `personas`, colonnes
+      `persona_id` et `temperature` sur `conversations`, pilotée par `PRAGMA user_version`
+- [x] Table `personas` : nom, icône, description, prompt système, modèle et
+      température par défaut
+- [x] CRUD complet `GET/POST /api/personas`, `GET/PATCH/DELETE /api/personas/{id}`
+- [x] Quatre personas d'exemple insérés **une seule fois** à la migration :
+      Assistant, Développeur, Homelab, Traducteur. Supprimés, ils ne reviennent pas
+- [x] Créer une conversation avec `persona_id` **copie** ses réglages dans la
+      conversation ; ce que la requête précise l'emporte sur le persona
+- [x] Le titre reste celui par défaut malgré le persona, pour être remplacé par la
+      première question — une liste de quatre « Développeur » serait inutilisable
+- [x] Supprimer un persona ne touche pas aux conversations : seul le lien est coupé
+- [x] Interface : cartes de larbins sur l'écran d'accueil, modale de gestion
+      (création, modification, suppression), bouton « Gérer les larbins »
+- [x] 57 tests au vert, dont un qui **reconstitue une base v1 avec des données** et
+      vérifie que la migration ne perd rien et ne duplique pas les exemples
+- [x] **Vérification navigateur** : choix d'un larbin, prompt et température
+      appliqués, conversation créée avec le bon persona, CRUD dans la modale,
+      aucune erreur console
+- [ ] **Vérification en réel** : `git pull` sur 192.168.0.40 — la base existante doit
+      se migrer seule au redémarrage, sans perdre les conversations de la phase 5
 
 ### Phase 7 — RAG documents locaux
 
@@ -364,3 +381,6 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Le raisonnement est enregistré mais **exclu** de l'historique renvoyé au modèle | Il gonflerait le contexte à chaque tour sans rien apporter, et certains fournisseurs le refusent |
 | 2026-09-05 | La conversation est créée au premier message, pas à l'ouverture de la page | Sinon la liste se remplit de conversations vides à chaque visite |
 | 2026-09-05 | Une génération interrompue est enregistrée telle quelle | Un début de réponse reste utile ; le perdre punirait l'utilisateur d'avoir cliqué sur « stop » |
+| 2026-09-05 | Les réglages d'un persona sont **copiés** dans la conversation, jamais référencés | Modifier un larbin ne doit pas réécrire rétroactivement des conversations dont les réponses ont été produites avec l'ancienne consigne |
+| 2026-09-05 | Migrations pilotées par `PRAGMA user_version`, chacune rejouable | Une instance déployée ne doit jamais avoir à repartir d'une base vide ; les erreurs « duplicate column » sont ignorées |
+| 2026-09-05 | Les personas d'exemple ne sont insérés qu'à la migration | S'ils étaient réinsérés au démarrage, ceux que l'utilisateur supprime reviendraient à chaque redémarrage |

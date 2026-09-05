@@ -24,12 +24,20 @@ class ConversationCreation(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     model: str | None = None
     system: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    persona_id: str | None = Field(
+        default=None,
+        description="Applique les réglages du persona à la conversation créée. "
+        "Ils sont copiés, pas référencés : modifier le persona ensuite ne "
+        "réécrit pas les conversations passées.",
+    )
 
 
 class ConversationModification(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     model: str | None = None
     system: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
 
 
 def base(request: Request) -> Database:
@@ -58,8 +66,26 @@ async def lister(request: Request) -> list[dict]:
 
 @router.post("", status_code=201)
 async def creer(request: Request, corps: ConversationCreation) -> dict:
-    return await base(request).creer_conversation(
-        titre=corps.title, modele=corps.model, systeme=corps.system
+    db = base(request)
+
+    titre, modele, systeme, temperature = (
+        corps.title, corps.model, corps.system, corps.temperature
+    )
+    if corps.persona_id:
+        persona = await db.persona(corps.persona_id)
+        if persona is None:
+            raise HTTPException(status_code=404, detail="Persona introuvable.")
+        # Ce que la requête précise l'emporte ; le persona ne fournit que
+        # les valeurs manquantes. Le titre reste volontairement celui par
+        # défaut : il sera remplacé par la première question, bien plus utile
+        # dans la liste que quatre conversations nommées « Développeur ».
+        modele = modele or persona["model"]
+        systeme = systeme or persona["system"]
+        temperature = temperature if temperature is not None else persona["temperature"]
+
+    return await db.creer_conversation(
+        titre=titre, modele=modele, systeme=systeme,
+        persona_id=corps.persona_id, temperature=temperature,
     )
 
 
@@ -78,7 +104,8 @@ async def modifier(
     db = base(request)
     await _ou_404(db, identifiant)
     return await db.modifier_conversation(
-        identifiant, title=corps.title, model=corps.model, system=corps.system
+        identifiant, title=corps.title, model=corps.model,
+        system=corps.system, temperature=corps.temperature,
     )
 
 

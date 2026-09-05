@@ -14,6 +14,7 @@
     <button id="nouvelle" class="bouton-plein">+ Nouvelle conversation</button>
     <nav class="liste" id="liste-conversations" aria-label="Conversations"></nav>
     <p class="liste-vide" id="liste-vide">Aucune conversation enregistrée.</p>
+    <button id="gerer-personas" class="bouton-discret">Gérer les larbins</button>
   </aside>
 
   <div class="voile" id="voile" hidden></div>
@@ -57,6 +58,7 @@
         <h1>Larbinus</h1>
         <p>Passerelle vers vos modèles, locaux et en ligne.</p>
         <p class="accueil-etat" id="accueil-etat">Chargement des modèles…</p>
+        <div class="personas" id="personas"></div>
       </div>
     </main>
 
@@ -68,6 +70,49 @@
     </form>
   </div>
 </div>
+
+<dialog id="modale-personas" class="modale">
+  <form method="dialog" class="modale-entete">
+    <strong>Larbins</strong>
+    <button class="bouton-icone" value="fermer" title="Fermer">✕</button>
+  </form>
+
+  <div class="modale-corps">
+    <div class="modale-liste" id="personas-liste"></div>
+
+    <form id="persona-formulaire" class="persona-formulaire">
+      <input type="hidden" id="persona-id">
+      <div class="ligne-deux">
+        <label>Icône
+          <input id="persona-icone" maxlength="4" placeholder="🙂">
+        </label>
+        <label>Nom
+          <input id="persona-nom" required maxlength="80" placeholder="Correcteur">
+        </label>
+      </div>
+      <label>Description
+        <input id="persona-description" maxlength="300"
+               placeholder="Ce que fait ce larbin, en une ligne">
+      </label>
+      <label>Prompt système
+        <textarea id="persona-systeme" rows="5"
+                  placeholder="Tu es… Réponds…"></textarea>
+      </label>
+      <div class="ligne-deux">
+        <label>Modèle par défaut
+          <select id="persona-modele"></select>
+        </label>
+        <label>Température <output id="persona-temperature-valeur">0.7</output>
+          <input type="range" id="persona-temperature" min="0" max="2" step="0.1" value="0.7">
+        </label>
+      </div>
+      <div class="modale-actions">
+        <button type="button" id="persona-annuler" class="bouton-plein">Nouveau</button>
+        <button type="submit" class="bouton-accent">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</dialog>
 
 <script src="/static/app.js"></script>
 </body>

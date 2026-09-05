@@ -51,9 +51,13 @@ async def _preparer(request: Request, body: ChatRequest) -> ChatRequest:
     complet = body.model_copy(
         update={
             "messages": [ChatMessage(**m) for m in historique] + list(body.messages),
-            # Le prompt système de la conversation s'applique si la requête
-            # n'en fournit pas un pour ce tour précis.
+            # Le prompt système et la température de la conversation s'appliquent
+            # si la requête n'en fournit pas pour ce tour précis — c'est ainsi
+            # qu'un persona continue d'agir sans que le client ait à le renvoyer.
             "system": body.system or conversation.get("system"),
+            "temperature": body.temperature
+            if body.temperature is not None
+            else conversation.get("temperature"),
         }
     )
     return complet

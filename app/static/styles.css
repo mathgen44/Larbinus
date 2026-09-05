@@ -357,3 +357,87 @@ code {
   .champ-modele { order: 3; flex-basis: 100%; }
   select { max-width: none; }
 }
+
+
+/* ---------------------------------------------------------- personas ----- */
+.bouton-discret {
+  margin-top: auto; padding: 8px 10px;
+  font: inherit; font-size: 12px; text-align: left;
+  color: var(--texte-doux); background: none;
+  border: 1px dashed var(--bordure); border-radius: 8px; cursor: pointer;
+}
+.bouton-discret:hover { color: var(--texte); border-style: solid; }
+
+.personas {
+  display: grid; gap: 8px; margin-top: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  max-width: 560px;
+}
+.persona-carte {
+  padding: 10px 12px; text-align: left; cursor: pointer;
+  background: var(--fond-eleve); color: var(--texte);
+  border: 1px solid var(--bordure); border-radius: var(--rayon);
+  display: grid; gap: 2px;
+}
+.persona-carte:hover { border-color: var(--accent); }
+.persona-carte strong { font-size: 14px; }
+.persona-carte span { font-size: 12px; color: var(--texte-doux); }
+
+.etiquette-persona {
+  display: inline-block; margin-left: 8px; padding: 1px 7px;
+  font-size: 11px; border-radius: 999px;
+  background: var(--fond-doux); color: var(--texte-doux);
+  border: 1px solid var(--bordure);
+}
+
+/* ------------------------------------------------------------- modale ---- */
+.modale {
+  width: min(680px, 94vw); padding: 0;
+  background: var(--fond-eleve); color: var(--texte);
+  border: 1px solid var(--bordure); border-radius: var(--rayon);
+}
+.modale::backdrop { background: rgba(0, 0, 0, .5); }
+
+.modale-entete {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--bordure);
+}
+
+.modale-corps {
+  display: grid; grid-template-columns: 200px 1fr;
+  max-height: min(70vh, 560px);
+}
+.modale-liste {
+  border-right: 1px solid var(--bordure); overflow-y: auto; padding: 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.modale-liste .entree-titre { padding: 8px 10px; border-radius: 8px; }
+.modale-liste .entree-titre:hover { background: var(--fond-doux); }
+
+.persona-formulaire {
+  display: grid; gap: 10px; padding: 14px; overflow-y: auto;
+}
+.persona-formulaire label { display: grid; gap: 5px; font-size: 12px; color: var(--texte-doux); }
+.persona-formulaire input[type="text"],
+.persona-formulaire input:not([type]),
+.persona-formulaire textarea,
+.persona-formulaire select {
+  padding: 8px 10px; font: inherit;
+  background: var(--fond); color: var(--texte);
+  border: 1px solid var(--bordure); border-radius: 8px;
+}
+.persona-formulaire textarea { resize: vertical; }
+.ligne-deux { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.modale-actions { display: flex; gap: 8px; justify-content: space-between; }
+.bouton-accent {
+  padding: 9px 16px; font: inherit; cursor: pointer;
+  background: var(--accent); color: var(--accent-texte);
+  border: none; border-radius: 8px;
+}
+
+@media (max-width: 700px) {
+  .modale-corps { grid-template-columns: 1fr; }
+  .modale-liste { border-right: none; border-bottom: 1px solid var(--bordure); max-height: 150px; }
+  .ligne-deux { grid-template-columns: 1fr; }
+}
