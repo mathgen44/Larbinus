@@ -236,8 +236,10 @@ Larbinus/
 - [x] Le titre reste celui par défaut malgré le persona, pour être remplacé par la
       première question — une liste de quatre « Développeur » serait inutilisable
 - [x] Supprimer un persona ne touche pas aux conversations : seul le lien est coupé
-- [x] Interface : cartes de larbins sur l'écran d'accueil, modale de gestion
-      (création, modification, suppression), bouton « Gérer les larbins »
+- [x] Interface : cartes de larbins sur l'écran d'accueil, dont une carte « + »
+      en fin de grille qui ouvre directement le formulaire de création ; entrée
+      « + Nouveau larbin » également en bas de la liste de la modale ; le bouton
+      « Supprimer » est masqué tant qu'aucun larbin n'est sélectionné
 - [x] 57 tests au vert, dont un qui **reconstitue une base v1 avec des données** et
       vérifie que la migration ne perd rien et ne duplique pas les exemples
 - [x] **Vérification navigateur** : choix d'un larbin, prompt et température
@@ -384,3 +386,5 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Les réglages d'un persona sont **copiés** dans la conversation, jamais référencés | Modifier un larbin ne doit pas réécrire rétroactivement des conversations dont les réponses ont été produites avec l'ancienne consigne |
 | 2026-09-05 | Migrations pilotées par `PRAGMA user_version`, chacune rejouable | Une instance déployée ne doit jamais avoir à repartir d'une base vide ; les erreurs « duplicate column » sont ignorées |
 | 2026-09-05 | Les personas d'exemple ne sont insérés qu'à la migration | S'ils étaient réinsérés au démarrage, ceux que l'utilisateur supprime reviendraient à chaque redémarrage |
+| 2026-09-05 | La création d'un larbin se déclenche depuis la grille de choix (carte « + ») | C'est en parcourant les larbins existants qu'on constate qu'il en manque un ; obliger à passer par un écran de gestion séparé ajoute une étape inutile |
+| 2026-09-05 | Le bouton « Supprimer » disparaît en mode création au lieu de changer de libellé | Un bouton qui change de rôle selon un état invisible est une source d'erreur ; mieux vaut qu'il ne soit pas là |

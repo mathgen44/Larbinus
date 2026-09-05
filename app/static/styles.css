@@ -381,6 +381,16 @@ code {
 }
 .persona-carte:hover { border-color: var(--accent); }
 .persona-carte strong { font-size: 14px; }
+
+.persona-carte.ajout {
+  place-content: center; place-items: center; gap: 0;
+  border-style: dashed; color: var(--texte-doux);
+}
+.persona-carte.ajout strong { font-size: 20px; line-height: 1.1; }
+.persona-carte.ajout:hover { color: var(--accent); }
+
+.entree-ajout { color: var(--texte-doux); }
+.entree-ajout:hover { color: var(--accent); }
 .persona-carte span { font-size: 12px; color: var(--texte-doux); }
 
 .etiquette-persona {
@@ -429,7 +439,10 @@ code {
 .persona-formulaire textarea { resize: vertical; }
 .ligne-deux { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-.modale-actions { display: flex; gap: 8px; justify-content: space-between; }
+/* `justify-content: flex-end` avec le bouton « Supprimer » en `margin-right:
+   auto` : ainsi « Enregistrer » reste à droite même quand l'autre est masqué. */
+.modale-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modale-actions .bouton-plein { margin-right: auto; }
 .bouton-accent {
   padding: 9px 16px; font: inherit; cursor: pointer;
   background: var(--accent); color: var(--accent-texte);
