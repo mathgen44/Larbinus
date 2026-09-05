@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import zlib
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,14 +29,19 @@ def anyio_backend():
 
 
 class EmbeddingsFactices:
-    """Vectorise sans réseau : un sac de mots projeté sur 16 dimensions.
+    """Vectorise sans réseau : un sac de mots projeté sur 64 dimensions.
 
     Grossier, mais suffisant pour que deux textes partageant du vocabulaire
     soient plus proches que deux textes étrangers — c'est tout ce que les
     tests ont besoin de vérifier.
+
+    `crc32` et non `hash()` : le hachage des chaînes en Python est randomisé à
+    chaque processus, ce qui rendait le classement des résultats variable d'une
+    exécution à l'autre. Un test dont le verdict dépend du lancement ne prouve
+    rien.
     """
 
-    dimension = 16
+    dimension = 64
 
     def __init__(self):
         self.appels = 0
@@ -46,7 +52,7 @@ class EmbeddingsFactices:
         for texte in textes:
             vecteur = [0.0] * self.dimension
             for mot in texte.lower().split():
-                vecteur[hash(mot) % self.dimension] += 1.0
+                vecteur[zlib.crc32(mot.encode()) % self.dimension] += 1.0
             vecteurs.append(vecteur)
         return vecteurs
 
@@ -144,6 +150,45 @@ def test_docx_et_xlsx():
     assert "beast" in fragments[0].texte
 
 
+def test_code_nest_pas_lu_comme_du_markdown():
+    """Un `#` en Python est un commentaire, pas un titre de section."""
+    source = b'''# Configuration du service
+import os
+
+def demarrer(port: int = 8474):
+    if port < 1024:
+        raise ValueError("port reserve")
+    return os.environ.get("HOTE", "0.0.0.0"), port
+'''
+    fragments = extraire("service.py", source)
+    assert len(fragments) == 1
+    assert fragments[0].titre is None          # aucun faux titre
+    assert fragments[0].meta.get("code") is True
+    # L'indentation doit survivre : elle porte la structure du code.
+    assert "    if port < 1024:" in fragments[0].texte
+
+
+def test_yaml_et_fichiers_sans_extension():
+    fragments = extraire("docker-compose.yml", b"services:\n  larbinus:\n    build: .\n")
+    assert fragments[0].meta.get("code") is True
+    assert "  larbinus:" in fragments[0].texte
+
+    fragments = extraire("Dockerfile", b"FROM python:3.12-slim\nWORKDIR /app\n")
+    assert fragments[0].meta.get("code") is True
+
+
+def test_code_decoupe_par_lignes_entieres():
+    from app.rag.decoupage import decouper as _decouper
+
+    lignes = "\n".join(f"    ligne_{i} = calcul({i})" for i in range(120))
+    morceaux = _decouper([Fragment(texte=lignes, meta={"code": True})], taille=400)
+    assert len(morceaux) > 1
+    # Aucune ligne ne doit avoir été coupée en son milieu.
+    for morceau in morceaux:
+        for ligne in morceau.contenu.split("\n"):
+            assert ligne == "" or ligne.startswith("    ligne_")
+
+
 # --------------------------------------------------------------------------- #
 #  Découpage
 # --------------------------------------------------------------------------- #
@@ -200,6 +245,38 @@ async def test_meme_fichier_depose_deux_fois_n_est_pas_duplique(rag):
     assert second["doublon"] is True
     assert second["id"] == premier["id"]
     assert len(await rag.depot.documents()) == 1
+
+
+async def test_reindexation_apres_echec_du_service(rag):
+    """Le cas réel : le modèle d'embedding manquait, on vient de l'installer."""
+    rag.client = None
+    document = await rag.deposer(
+        "note.md", b"# Titre\n\nUn contenu assez long pour produire un fragment.\n"
+    )
+    assert document["status"] == "en_attente"
+
+    # Le fichier déposé doit avoir été conservé, sinon aucune reprise possible.
+    assert (rag.dossier_depots / document["path"]).is_file()
+
+    rag.client = EmbeddingsFactices()
+    resume = await rag.reindexer_les_echecs()
+    assert resume == {"tentes": 1, "indexes": 1}
+
+    recharge = await rag.depot.document(document["id"])
+    assert recharge["status"] == "indexe" and recharge["chunk_count"] >= 1
+    assert await rag.rechercher("contenu", limite=1)
+
+
+async def test_suppression_retire_aussi_le_fichier_conserve(rag):
+    document = await rag.deposer(
+        "jetable.md", b"# Titre\n\nUn contenu assez long pour produire un fragment.\n"
+    )
+    chemin = rag.dossier_depots / document["path"]
+    assert chemin.is_file()
+
+    assert await rag.supprimer(document["id"]) is True
+    assert not chemin.exists()
+    assert await rag.depot.documents() == []
 
 
 async def test_document_illisible_est_marque_en_erreur_sans_lever(rag):

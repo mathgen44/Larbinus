@@ -92,9 +92,14 @@
 
     <div class="documents-barre">
       <span class="note" id="documents-etat">Chargement…</span>
-      <button type="button" class="bouton-plein" id="documents-scan">
-        Scanner le dossier surveillé
-      </button>
+      <div class="documents-actions">
+        <button type="button" class="bouton-plein" id="documents-reprendre" hidden>
+          Réessayer les échecs
+        </button>
+        <button type="button" class="bouton-plein" id="documents-scan">
+          Scanner le dossier surveillé
+        </button>
+      </div>
     </div>
 
     <div class="documents-liste" id="documents-liste"></div>

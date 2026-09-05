@@ -72,6 +72,15 @@ async def scanner(request: Request) -> dict:
     return await service(request).scanner()
 
 
+@router.post("/reindexer-echecs")
+async def reindexer_echecs(request: Request) -> dict:
+    """Réessaie tous les documents en erreur ou en attente.
+
+    Utile juste après un `ollama pull` du modèle d'embedding manquant.
+    """
+    return await service(request).reindexer_les_echecs()
+
+
 @router.post("/{identifiant}/reindexer")
 async def reindexer(request: Request, identifiant: str) -> dict:
     document = await service(request).reindexer(identifiant)
@@ -82,10 +91,8 @@ async def reindexer(request: Request, identifiant: str) -> dict:
 
 @router.delete("/{identifiant}", status_code=204, response_class=Response)
 async def supprimer(request: Request, identifiant: str):
-    rag = service(request)
-    if await rag.depot.document(identifiant) is None:
+    if not await service(request).supprimer(identifiant):
         raise HTTPException(status_code=404, detail="Document introuvable.")
-    await rag.depot.supprimer_document(identifiant)
     return Response(status_code=204)
 
 

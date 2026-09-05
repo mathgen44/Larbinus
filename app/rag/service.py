@@ -44,6 +44,16 @@ class ServiceRag:
     def modele(self) -> str:
         return self.settings.embedding_model
 
+    @property
+    def dossier_depots(self) -> Path:
+        """Où sont conservés les fichiers déposés depuis l'interface.
+
+        Sans cette copie, un document dont l'indexation échoue — service
+        d'embeddings arrêté, modèle absent — serait définitivement perdu :
+        impossible de le réessayer sans que l'utilisateur le redépose.
+        """
+        return Path(self.settings.data_dir) / "depots"
+
     async def aclose(self) -> None:
         if self.client:
             await self.client.aclose()
@@ -62,11 +72,26 @@ class ServiceRag:
         if existant:
             return {**existant, "doublon": True}
 
+        if source == "depot":
+            chemin = await self._conserver(nom, sha, donnees)
+
         document = await self.depot.enregistrer_document(
             nom=nom, sha=sha, taille=len(donnees), source=source, chemin=chemin
         )
         await self.indexer(document["id"], nom, donnees)
         return {**(await self.depot.document(document["id"])), "doublon": False}
+
+    async def _conserver(self, nom: str, sha: str, donnees: bytes) -> str:
+        """Range le fichier déposé sous son empreinte, pour pouvoir le relire."""
+        extension = Path(nom).suffix.lower()
+        cible = self.dossier_depots / f"{sha}{extension}"
+
+        def ecrire() -> None:
+            cible.parent.mkdir(parents=True, exist_ok=True)
+            cible.write_bytes(donnees)
+
+        await asyncio.to_thread(ecrire)
+        return cible.name
 
     async def indexer(self, document_id: str, nom: str, donnees: bytes) -> None:
         """Extrait, découpe et vectorise un document. Ne lève jamais.
@@ -125,27 +150,60 @@ class ServiceRag:
             vecteurs.extend(await self.client.vectoriser(lot))
         return vecteurs
 
+    def _fichier_source(self, document: dict) -> Path | None:
+        if not document.get("path"):
+            return None
+        racine = (
+            Path(self.settings.documents_dir)
+            if document["source"] == "dossier"
+            else self.dossier_depots
+        )
+        return racine / document["path"]
+
     async def reindexer(self, document_id: str) -> dict | None:
-        """Réindexe un document du dossier surveillé (le seul relisible)."""
+        """Réessaie l'indexation à partir du fichier conservé."""
         document = await self.depot.document(document_id)
         if document is None:
             return None
-        if document["source"] != "dossier" or not document["path"]:
-            await self.depot.marquer(
-                document_id, document["status"],
-                erreur="Réindexation impossible : le fichier d'origine n'est pas conservé "
-                       "pour les documents déposés depuis l'interface.",
-            )
-            return await self.depot.document(document_id)
 
-        chemin = Path(self.settings.documents_dir) / document["path"]
-        if not chemin.is_file():
-            await self.depot.marquer(document_id, "erreur", erreur="Fichier introuvable.")
+        chemin = self._fichier_source(document)
+        if chemin is None or not chemin.is_file():
+            await self.depot.marquer(
+                document_id, "erreur",
+                erreur="Fichier d'origine introuvable : redéposez-le.",
+            )
             return await self.depot.document(document_id)
 
         donnees = await asyncio.to_thread(chemin.read_bytes)
         await self.indexer(document_id, document["filename"], donnees)
         return await self.depot.document(document_id)
+
+    async def reindexer_les_echecs(self) -> dict:
+        """Réessaie tous les documents en erreur ou en attente.
+
+        Le cas d'usage principal : le modèle d'embedding manquait, on vient de
+        le récupérer, et l'on veut rattraper tout ce qui a échoué sans cliquer
+        document par document.
+        """
+        documents = await self.depot.documents()
+        a_reprendre = [d for d in documents if d["status"] != "indexe"]
+        reussis = 0
+        for document in a_reprendre:
+            resultat = await self.reindexer(document["id"])
+            if resultat and resultat["status"] == "indexe":
+                reussis += 1
+        return {"tentes": len(a_reprendre), "indexes": reussis}
+
+    async def supprimer(self, document_id: str) -> bool:
+        """Supprime le document, ses fragments et le fichier conservé."""
+        document = await self.depot.document(document_id)
+        if document is None:
+            return False
+        if document["source"] == "depot":
+            chemin = self._fichier_source(document)
+            if chemin and chemin.is_file():
+                await asyncio.to_thread(chemin.unlink)
+        return await self.depot.supprimer_document(document_id)
 
     # -- dossier surveillé -------------------------------------------------- #
     async def scanner(self) -> dict:

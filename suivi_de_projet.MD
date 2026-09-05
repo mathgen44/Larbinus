@@ -301,7 +301,15 @@ Larbinus/
       fichier, section, page et extrait
 - [x] Écran « Documents » : glisser-déposer, liste avec état et fragments,
       réindexation, suppression, bouton de scan du dossier surveillé
-- [x] 85 tests au vert, dont un qui vérifie **ce que le modèle reçoit
+- [x] Code et configuration indexables (`.py`, `.yml`, `.json`, `.sh`,
+      `Dockerfile`, `Makefile`…) avec un lecteur distinct : ni détection de
+      titres sur les `#`, ni normalisation des espaces, et un découpage par
+      lignes entières
+- [x] Fichiers déposés conservés sous `DATA_DIR/depots/` : une indexation
+      échouée peut être reprise sans redéposer
+- [x] Bouton « Réessayer les échecs » — le cas d'usage étant précisément
+      « le modèle d'embedding manquait, je viens de l'installer »
+- [x] 90 tests au vert, dont un qui vérifie **ce que le modèle reçoit
       réellement** dans son prompt système, et non seulement ce qu'il répond
 - [x] **Vérification navigateur** : dépôt d'un fichier, scan du dossier,
       activation de la bascule, question dont la réponse n'existe que dans les
@@ -387,6 +395,9 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 3 | 2026-09-05 | 4 | Le panneau de réglages s'affichait alors qu'il portait l'attribut `hidden` | `.reglages { display: grid }` est une règle d'auteur : elle l'emporte sur le `[hidden] { display: none }` de la feuille du navigateur | Règle globale `[hidden] { display: none !important; }` ajoutée en tête de la feuille de style | Corrigé |
 | 4 | 2026-09-05 | 5 | `DELETE /api/conversations/{id}` faisait échouer le démarrage : « Status code 204 must not have a response body » | L'annotation de retour `-> None` amène FastAPI à générer un modèle de réponse, interdit sur un 204 | `response_class=Response`, annotation retirée, `Response(status_code=204)` renvoyé explicitement | Corrigé |
 | 5 | 2026-09-05 | 5 | Le tiroir mobile fermé restait atteignable au clavier et lu par les lecteurs d'écran | `transform: translateX(-100%)` sort l'élément de l'écran mais le laisse dans l'ordre de tabulation | `visibility: hidden` ajouté, avec une transition retardée pour ne pas couper l'animation | Corrigé |
+| 6 | 2026-09-05 | 7 | `Ollama a répondu 404 : model "nomic-embed-text" not found` au dépôt d'un document | Le modèle d'embedding n'était pas installé sur l'instance Ollama | `ollama pull nomic-embed-text`. Message d'erreur déjà explicite, conservé tel quel | Clos |
+| 7 | 2026-09-05 | 7 | Un document déposé dont l'indexation échoue ne pouvait pas être réessayé | Les octets du fichier n'étaient pas conservés : seul le dossier surveillé était relisible | Les fichiers déposés sont rangés sous `DATA_DIR/depots/<empreinte>` ; réindexation unitaire et bouton « Réessayer les échecs » ajoutés ; le fichier est supprimé avec le document | Corrigé |
+| 8 | 2026-09-05 | 7 | Deux tests de recherche échouaient une fois sur deux | Le double de test vectorisait avec `hash()`, randomisé à chaque processus : le classement des résultats variait d'une exécution à l'autre | Remplacé par `zlib.crc32`, déterministe ; suite relancée trois fois pour le vérifier | Corrigé |
 
 ### Points de vigilance observés en production
 
@@ -450,3 +461,5 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Le contexte documentaire va dans le prompt système du tour, pas dans l'historique | Sinon les extraits s'accumulent à chaque tour, gonflent le contexte et finissent par le saturer — critique avec 8 Go de VRAM |
 | 2026-09-05 | Les sources sont émises avant la réponse et enregistrées avec elle | Voir les sources pendant la rédaction permet de juger la réponse au fil de l'eau ; les enregistrer permet de les revoir sans relancer une recherche qui donnerait d'autres extraits |
 | 2026-09-05 | Une recherche documentaire en panne n'interrompt pas la conversation | Un service d'embeddings arrêté doit dégrader la réponse, pas empêcher de discuter |
+| 2026-09-05 | Le code a son propre lecteur, distinct du Markdown | Un `#` en Python ou en YAML est un commentaire, pas un titre ; et l'indentation porte la structure, la normaliser rendrait les extraits inutilisables |
+| 2026-09-05 | Les fichiers déposés sont conservés sur disque | Sans eux, un échec d'indexation est irrattrapable : l'utilisateur doit tout redéposer, alors que la panne était passagère |

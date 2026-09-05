@@ -43,6 +43,37 @@ def _phrases(texte: str) -> list[str]:
     return parties or ([texte.strip()] if texte.strip() else [])
 
 
+def _decouper_code(texte: str, taille: int, chevauchement: int) -> list[str]:
+    """Découpe du code par lignes entières.
+
+    Le découpage par phrases n'a aucun sens ici : il couperait au milieu d'une
+    instruction et détruirait l'indentation, qui porte la structure.
+    """
+    lignes = texte.split("\n")
+    morceaux: list[str] = []
+    courant: list[str] = []
+    longueur = 0
+
+    for ligne in lignes:
+        if longueur + len(ligne) + 1 > taille and courant:
+            morceaux.append("\n".join(courant))
+            report: list[str] = []
+            report_longueur = 0
+            for precedente in reversed(courant):
+                if report_longueur + len(precedente) > chevauchement:
+                    break
+                report.insert(0, precedente)
+                report_longueur += len(precedente) + 1
+            courant = report
+            longueur = report_longueur
+        courant.append(ligne)
+        longueur += len(ligne) + 1
+
+    if courant:
+        morceaux.append("\n".join(courant))
+    return [m for m in morceaux if m.strip()]
+
+
 def _decouper_texte(
     texte: str, taille: int, chevauchement: int
 ) -> list[str]:
@@ -94,8 +125,13 @@ def decouper(
     ordinal = 0
 
     for fragment in fragments:
-        for contenu in _decouper_texte(fragment.texte, taille, chevauchement):
-            if len(contenu) < TAILLE_MINIMALE and morceaux:
+        est_code = bool(fragment.meta.get("code"))
+        decoupeur = _decouper_code if est_code else _decouper_texte
+        for contenu in decoupeur(fragment.texte, taille, chevauchement):
+            # Un fragment de code court reste lisible et utile tel quel ;
+            # le fusionner avec le précédent mélangerait deux endroits du
+            # fichier dans un même extrait.
+            if not est_code and len(contenu) < TAILLE_MINIMALE and morceaux:
                 # Un résidu trop court n'a pas d'embedding utile : on le
                 # rattache au morceau précédent plutôt que de l'indexer seul.
                 precedent = morceaux[-1]

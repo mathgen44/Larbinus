@@ -25,12 +25,51 @@ EXTENSIONS = {
     ".xlsm": "xlsx",
     ".html": "html",
     ".htm": "html",
+    # Texte en prose : les titres Markdown structurent le découpage.
     ".md": "texte",
     ".markdown": "texte",
     ".txt": "texte",
     ".text": "texte",
     ".csv": "texte",
     ".log": "texte",
+    # Code et configuration : traités à part. Les appliquer au lecteur
+    # Markdown serait un piège — un `# commentaire` Python ou YAML y passerait
+    # pour un titre de section, et l'indentation serait écrasée.
+    ".py": "code",
+    ".js": "code",
+    ".mjs": "code",
+    ".ts": "code",
+    ".jsx": "code",
+    ".tsx": "code",
+    ".sh": "code",
+    ".bash": "code",
+    ".ps1": "code",
+    ".sql": "code",
+    ".yml": "code",
+    ".yaml": "code",
+    ".json": "code",
+    ".toml": "code",
+    ".ini": "code",
+    ".cfg": "code",
+    ".conf": "code",
+    ".go": "code",
+    ".rs": "code",
+    ".rb": "code",
+    ".php": "code",
+    ".java": "code",
+    ".c": "code",
+    ".h": "code",
+    ".cpp": "code",
+    ".hpp": "code",
+    ".css": "code",
+}
+
+#: Fichiers reconnus par leur nom, faute d'extension.
+NOMS_CONNUS = {
+    "dockerfile": "code",
+    "makefile": "code",
+    "docker-compose.yml": "code",
+    "readme": "texte",
 }
 
 
@@ -53,13 +92,17 @@ class Fragment:
 
 
 def famille(nom: str) -> str:
-    extension = Path(nom).suffix.lower()
-    if extension not in EXTENSIONS:
-        raise FormatNonSupporte(
-            f"Format non pris en charge : « {extension or nom} ». "
-            f"Formats acceptés : {', '.join(sorted(EXTENSIONS))}."
-        )
-    return EXTENSIONS[extension]
+    chemin = Path(nom)
+    extension = chemin.suffix.lower()
+    if extension in EXTENSIONS:
+        return EXTENSIONS[extension]
+    # Dockerfile, Makefile… n'ont pas d'extension.
+    if chemin.name.lower() in NOMS_CONNUS:
+        return NOMS_CONNUS[chemin.name.lower()]
+    raise FormatNonSupporte(
+        f"Format non pris en charge : « {extension or nom} ». "
+        f"Formats acceptés : {', '.join(sorted(EXTENSIONS))}."
+    )
 
 
 def nettoyer(texte: str) -> str:
@@ -103,6 +146,22 @@ def extraire_texte(donnees: bytes) -> list[Fragment]:
         propre = nettoyer(contenu)
         return [Fragment(texte=propre)] if propre else []
     return fragments
+
+
+def extraire_code(donnees: bytes) -> list[Fragment]:
+    """Code source et fichiers de configuration.
+
+    Aucune détection de titres, et surtout **pas de normalisation des
+    espaces** : l'indentation porte du sens en Python comme en YAML, et un
+    extrait désindenté serait inutilisable dans une réponse.
+    """
+    contenu = donnees.decode("utf-8", errors="replace")
+    contenu = contenu.replace("\r\n", "\n").replace("\r", "\n")
+    lignes = [ligne.rstrip() for ligne in contenu.split("\n")]
+    texte = "\n".join(lignes).strip("\n")
+    if not texte.strip():
+        return []
+    return [Fragment(texte=texte, meta={"code": True})]
 
 
 # --------------------------------------------------------------------------- #
@@ -276,6 +335,7 @@ def extraire_html(donnees: bytes) -> list[Fragment]:
 #  Aiguillage
 # --------------------------------------------------------------------------- #
 EXTRACTEURS = {
+    "code": extraire_code,
     "pdf": extraire_pdf,
     "docx": extraire_docx,
     "xlsx": extraire_xlsx,
