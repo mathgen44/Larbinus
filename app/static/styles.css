@@ -437,6 +437,23 @@ code {
   border: 1px solid var(--bordure); border-radius: 8px;
 }
 .persona-formulaire textarea { resize: vertical; }
+
+/* Palette d'emojis : un champ texte vide n'indique pas qu'on attend un emoji.
+   Proposer des choix cliquables rend l'intention évidente, sans interdire la
+   saisie libre pour qui veut son propre symbole. */
+.palette-icones {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: -4px;
+}
+.palette-icones button {
+  width: 30px; height: 30px; font-size: 15px; line-height: 1;
+  background: var(--fond); color: var(--texte);
+  border: 1px solid var(--bordure); border-radius: 8px; cursor: pointer;
+}
+.palette-icones button:hover { border-color: var(--accent); }
+.palette-icones button[aria-pressed="true"] {
+  border-color: var(--accent); background: var(--fond-doux);
+}
 .ligne-deux { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 /* `justify-content: flex-end` avec le bouton « Supprimer » en `margin-right:

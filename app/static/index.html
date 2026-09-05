@@ -84,12 +84,15 @@
       <input type="hidden" id="persona-id">
       <div class="ligne-deux">
         <label>Icône
-          <input id="persona-icone" maxlength="4" placeholder="🙂">
+          <input id="persona-icone" maxlength="4" placeholder="🙂"
+                 title="Un emoji — cliquez-en un ci-dessous, ou saisissez le vôtre">
         </label>
         <label>Nom
           <input id="persona-nom" required maxlength="80" placeholder="Correcteur">
         </label>
       </div>
+      <div class="palette-icones" id="palette-icones" role="group"
+           aria-label="Icônes proposées"></div>
       <label>Description
         <input id="persona-description" maxlength="300"
                placeholder="Ce que fait ce larbin, en une ligne">

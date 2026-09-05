@@ -240,6 +240,8 @@ Larbinus/
       en fin de grille qui ouvre directement le formulaire de création ; entrée
       « + Nouveau larbin » également en bas de la liste de la modale ; le bouton
       « Supprimer » est masqué tant qu'aucun larbin n'est sélectionné
+- [x] Palette de 24 emojis cliquables pour l'icône du larbin, la saisie libre
+      restant possible ; recliquer l'icône retenue la retire
 - [x] 57 tests au vert, dont un qui **reconstitue une base v1 avec des données** et
       vérifie que la migration ne perd rien et ne duplique pas les exemples
 - [x] **Vérification navigateur** : choix d'un larbin, prompt et température
@@ -388,3 +390,4 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Les personas d'exemple ne sont insérés qu'à la migration | S'ils étaient réinsérés au démarrage, ceux que l'utilisateur supprime reviendraient à chaque redémarrage |
 | 2026-09-05 | La création d'un larbin se déclenche depuis la grille de choix (carte « + ») | C'est en parcourant les larbins existants qu'on constate qu'il en manque un ; obliger à passer par un écran de gestion séparé ajoute une étape inutile |
 | 2026-09-05 | Le bouton « Supprimer » disparaît en mode création au lieu de changer de libellé | Un bouton qui change de rôle selon un état invisible est une source d'erreur ; mieux vaut qu'il ne soit pas là |
+| 2026-09-05 | Palette d'emojis cliquables plutôt qu'un simple champ texte pour l'icône | Un champ vide n'indique pas qu'il attend un emoji ; question posée par l'utilisateur, donc défaut d'interface avéré. Les emojis proposés sont choisis parmi les symboles largement présents dans les polices système |
