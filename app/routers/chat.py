@@ -1,9 +1,10 @@
 """API de conversation native de Larbinus.
 
 `POST /api/chat` renvoie soit un flux SSE (`stream: true`, défaut), soit une
-réponse JSON complète. Le flux porte quatre types d'événements : `delta`
+réponse JSON complète. Le flux porte cinq types d'événements : `delta`
 (réponse visible), `reasoning` (monologue interne des modèles de raisonnement),
-`done` et `error`.
+`sources` (extraits de documents retenus, émis avant la réponse), `done` et
+`error`.
 
 Deux modes de conversation coexistent :
 
@@ -27,6 +28,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
+from app.rag.depot import IndexIncoherent
+from app.rag.embeddings import EmbeddingIndisponible
 from app.schemas import ChatMessage, ChatRequest
 from app.security import require_api_key
 from app.storage.db import Database
@@ -37,30 +40,72 @@ logger = logging.getLogger("larbinus.chat")
 router = APIRouter(prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key)])
 
 
-async def _preparer(request: Request, body: ChatRequest) -> ChatRequest:
-    """Reconstitue la requête complète à partir de l'historique enregistré."""
-    if not body.conversation_id:
-        return body
+async def _documents_actifs(request: Request, body: ChatRequest, conversation: dict | None) -> bool:
+    """La requête tranche ; sinon on suit le réglage de la conversation."""
+    if body.rag is not None:
+        return body.rag
+    return bool(conversation and conversation.get("rag"))
 
-    db: Database = request.app.state.db
-    conversation = await db.conversation(body.conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation introuvable.")
 
-    historique = await db.historique(body.conversation_id)
+async def _preparer(request: Request, body: ChatRequest) -> tuple[ChatRequest, list[dict]]:
+    """Reconstitue la requête complète : historique, prompt système, documents."""
+    conversation = None
+    messages = list(body.messages)
+    systeme = body.system
+    temperature = body.temperature
+
+    if body.conversation_id:
+        db: Database = request.app.state.db
+        conversation = await db.conversation(body.conversation_id)
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation introuvable.")
+
+        historique = await db.historique(body.conversation_id)
+        messages = [ChatMessage(**m) for m in historique] + messages
+        # Le prompt système et la température de la conversation s'appliquent
+        # si la requête n'en fournit pas pour ce tour précis — c'est ainsi
+        # qu'un persona continue d'agir sans que le client ait à le renvoyer.
+        systeme = systeme or conversation.get("system")
+        if temperature is None:
+            temperature = conversation.get("temperature")
+
+    sources: list[dict] = []
+    if await _documents_actifs(request, body, conversation):
+        sources = await _injecter_documents(request, body, messages)
+        if sources:
+            contexte = request.state.contexte_rag
+            # Le contexte est placé dans le prompt système plutôt que dans un
+            # message : il concerne ce tour-ci, et n'a pas à polluer
+            # l'historique enregistré des tours suivants.
+            systeme = f"{systeme}\n\n{contexte}" if systeme else contexte
+
     complet = body.model_copy(
-        update={
-            "messages": [ChatMessage(**m) for m in historique] + list(body.messages),
-            # Le prompt système et la température de la conversation s'appliquent
-            # si la requête n'en fournit pas pour ce tour précis — c'est ainsi
-            # qu'un persona continue d'agir sans que le client ait à le renvoyer.
-            "system": body.system or conversation.get("system"),
-            "temperature": body.temperature
-            if body.temperature is not None
-            else conversation.get("temperature"),
-        }
+        update={"messages": messages, "system": systeme, "temperature": temperature}
     )
-    return complet
+    return complet, sources
+
+
+async def _injecter_documents(
+    request: Request, body: ChatRequest, messages: list[ChatMessage]
+) -> list[dict]:
+    """Cherche les extraits pertinents pour la dernière question posée."""
+    rag = request.app.state.rag
+    if not rag.disponible:
+        return []
+
+    question = next(
+        (m.content for m in reversed(messages) if m.role == "user"), ""
+    )
+    try:
+        contexte, sources = await rag.contexte(question, limite=body.rag_top_k)
+    except (EmbeddingIndisponible, IndexIncoherent) as exc:
+        # Un index en panne ne doit pas empêcher de converser : on répond sans
+        # documents et on le dit dans les logs.
+        logger.warning("Recherche documentaire indisponible : %s", exc)
+        return []
+
+    request.state.contexte_rag = contexte
+    return sources
 
 
 async def _enregistrer_question(request: Request, body: ChatRequest) -> None:
@@ -80,6 +125,7 @@ async def _enregistrer_reponse(
     raisonnement: str,
     usage: dict,
     duree_ms: int,
+    sources: list[dict],
 ) -> None:
     if not body.conversation_id or not (contenu or raisonnement):
         return
@@ -93,6 +139,7 @@ async def _enregistrer_reponse(
         provider=provider.name,
         usage=usage,
         duration_ms=duree_ms,
+        sources=sources or None,
     )
     await db.modifier_conversation(body.conversation_id, model=body.model)
 
@@ -108,21 +155,21 @@ async def chat(request: Request, body: ChatRequest):
     registry: ProviderRegistry = request.app.state.registry
     provider = registry.resolve(body.model)
 
-    complet = await _preparer(request, body)
+    complet, sources = await _preparer(request, body)
     await _enregistrer_question(request, body)
 
     if not body.stream:
-        return await _complete(request, body, complet, provider)
+        return await _complete(request, body, complet, provider, sources)
 
     return StreamingResponse(
-        _event_stream(request, body, complet, provider),
+        _event_stream(request, body, complet, provider, sources),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
 
 
 async def _complete(
-    request: Request, body: ChatRequest, complet: ChatRequest, provider
+    request: Request, body: ChatRequest, complet: ChatRequest, provider, sources: list[dict]
 ) -> JSONResponse:
     """Mode non-streaming : on consomme le flux et on renvoie le tout d'un bloc."""
     started = time.perf_counter()
@@ -141,7 +188,9 @@ async def _complete(
     reasoning = "".join(reasoning_parts)
     duree = round((time.perf_counter() - started) * 1000)
 
-    await _enregistrer_reponse(request, body, provider, contenu, reasoning, usage, duree)
+    await _enregistrer_reponse(
+        request, body, provider, contenu, reasoning, usage, duree, sources
+    )
 
     return JSONResponse(
         {
@@ -152,6 +201,7 @@ async def _complete(
             # Absent pour un modèle classique, plutôt qu'une chaîne vide :
             # le client sait ainsi distinguer « pas de raisonnement » de « vide ».
             **({"reasoning": reasoning} if reasoning else {}),
+            **({"sources": sources} if sources else {}),
             "finish_reason": finish_reason,
             "usage": usage,
             "duration_ms": duree,
@@ -160,7 +210,7 @@ async def _complete(
 
 
 async def _event_stream(
-    request: Request, body: ChatRequest, complet: ChatRequest, provider
+    request: Request, body: ChatRequest, complet: ChatRequest, provider, sources: list[dict]
 ) -> AsyncIterator[str]:
     """Flux SSE. Une erreur de fournisseur devient un événement `error`.
 
@@ -174,6 +224,11 @@ async def _event_stream(
     interrompu = False
 
     try:
+        # Les sources partent avant la réponse : l'utilisateur voit sur quoi le
+        # modèle s'appuie pendant qu'il rédige, et non après coup.
+        if sources:
+            yield sse_event({"sources": sources}, event="sources")
+
         async for chunk in provider.stream_chat(complet):
             if await request.is_disconnected():
                 logger.info("Client déconnecté, arrêt du flux (%s)", body.model)
@@ -216,6 +271,7 @@ async def _event_stream(
             "".join(reasoning_parts),
             usage,
             round((time.perf_counter() - started) * 1000),
+            sources,
         )
         if interrompu:
             logger.info("Réponse partielle enregistrée (%s)", body.conversation_id)

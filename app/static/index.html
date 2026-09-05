@@ -14,6 +14,7 @@
     <button id="nouvelle" class="bouton-plein">+ Nouvelle conversation</button>
     <nav class="liste" id="liste-conversations" aria-label="Conversations"></nav>
     <p class="liste-vide" id="liste-vide">Aucune conversation enregistrée.</p>
+    <button id="gerer-documents" class="bouton-discret">Documents</button>
     <button id="gerer-personas" class="bouton-discret">Gérer les larbins</button>
   </aside>
 
@@ -50,6 +51,10 @@
         Température <output id="temperature-valeur">0.7</output>
         <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
       </label>
+      <label class="ligne-bascule">
+        <input type="checkbox" id="rag-actif">
+        <span>Interroger mes documents <em id="rag-etat"></em></span>
+      </label>
       <p class="note">Le prompt système est enregistré avec la conversation en cours.</p>
     </section>
 
@@ -70,6 +75,31 @@
     </form>
   </div>
 </div>
+
+<dialog id="modale-documents" class="modale">
+  <form method="dialog" class="modale-entete">
+    <strong>Documents</strong>
+    <button class="bouton-icone" value="fermer" title="Fermer">✕</button>
+  </form>
+
+  <div class="modale-corps documents-corps">
+    <div class="depot" id="depot">
+      <p><strong>Glissez vos fichiers ici</strong></p>
+      <p class="note" id="depot-formats"></p>
+      <button type="button" class="bouton-accent" id="depot-parcourir">Parcourir…</button>
+      <input type="file" id="depot-fichiers" multiple hidden>
+    </div>
+
+    <div class="documents-barre">
+      <span class="note" id="documents-etat">Chargement…</span>
+      <button type="button" class="bouton-plein" id="documents-scan">
+        Scanner le dossier surveillé
+      </button>
+    </div>
+
+    <div class="documents-liste" id="documents-liste"></div>
+  </div>
+</dialog>
 
 <dialog id="modale-personas" class="modale">
   <form method="dialog" class="modale-entete">

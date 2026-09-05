@@ -59,6 +59,35 @@ Homelab, Traducteur — modifiables et supprimables depuis l'interface. Démarre
 conversation depuis un larbin copie ses réglages : le modifier ensuite ne réécrit
 pas les conversations passées.
 
+## Documents (RAG)
+
+Larbinus peut répondre à partir de vos propres documents — PDF, Markdown, texte,
+Word, Excel, HTML. Deux façons de les fournir :
+
+* **glisser-déposer** dans l'écran « Documents » de l'interface ;
+* **dossier surveillé** : tout fichier reconnu déposé dans `./documents`
+  (monté sur `/documents` dans le conteneur, éventuellement un partage NFS ou
+  Samba) est indexé au clic sur « Scanner le dossier surveillé ».
+
+L'indexation demande un modèle d'embedding, à récupérer une fois :
+
+```bash
+ollama pull nomic-embed-text
+```
+
+Le fournisseur d'embeddings (`EMBEDDING_PROVIDER`) est indépendant du modèle de
+conversation : on peut discuter avec une API en ligne tout en vectorisant ses
+documents en local, ce qui évite de les envoyer chez un tiers.
+
+Une fois des documents indexés, la case « Interroger mes documents » des
+réglages active la recherche pour la conversation en cours. Les extraits
+retenus s'affichent sous la réponse, avec leur fichier, leur section et leur
+page — une réponse sourcée est vérifiable, une réponse sans source ne l'est pas.
+
+Changer de modèle d'embedding rend l'index existant incomparable : Larbinus le
+détecte et le signale. Il faut alors réinitialiser l'index
+(`POST /api/documents/reinitialiser`) puis réindexer.
+
 Les conversations sont enregistrées dans `data/larbinus.db` (SQLite) : elles
 survivent au redémarrage du conteneur et peuvent être exportées en Markdown ou
 en JSON depuis l'interface comme depuis l'API.

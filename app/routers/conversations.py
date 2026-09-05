@@ -25,6 +25,7 @@ class ConversationCreation(BaseModel):
     model: str | None = None
     system: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    rag: bool = Field(default=False, description="Interroger les documents indexés.")
     persona_id: str | None = Field(
         default=None,
         description="Applique les réglages du persona à la conversation créée. "
@@ -38,6 +39,7 @@ class ConversationModification(BaseModel):
     model: str | None = None
     system: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    rag: bool | None = None
 
 
 def base(request: Request) -> Database:
@@ -85,7 +87,7 @@ async def creer(request: Request, corps: ConversationCreation) -> dict:
 
     return await db.creer_conversation(
         titre=titre, modele=modele, systeme=systeme,
-        persona_id=corps.persona_id, temperature=temperature,
+        persona_id=corps.persona_id, temperature=temperature, rag=corps.rag,
     )
 
 
@@ -106,6 +108,7 @@ async def modifier(
     return await db.modifier_conversation(
         identifiant, title=corps.title, model=corps.model,
         system=corps.system, temperature=corps.temperature,
+        rag=None if corps.rag is None else int(corps.rag),
     )
 
 

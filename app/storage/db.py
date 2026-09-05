@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger("larbinus.db")
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -116,6 +116,12 @@ MIGRATIONS: dict[int, list[str]] = {
         )
         """,
         "ALTER TABLE conversations ADD COLUMN rag INTEGER NOT NULL DEFAULT 0",
+    ],
+    4: [
+        # Les sources sont enregistrées avec la réponse : rouvrir une
+        # conversation doit permettre de revoir sur quoi le modèle s'est
+        # appuyé, sans relancer une recherche qui donnerait d'autres extraits.
+        "ALTER TABLE messages ADD COLUMN sources TEXT",
     ],
 }
 
@@ -284,6 +290,7 @@ class Database:
         for ligne in lignes:
             message = dict(ligne)
             message["usage"] = json.loads(message.pop("usage_json") or "{}")
+            message["sources"] = json.loads(message.get("sources") or "[]")
             messages.append(message)
         return messages
 
@@ -387,6 +394,7 @@ class Database:
         provider: str | None = None,
         usage: dict | None = None,
         duration_ms: int | None = None,
+        sources: list[dict] | None = None,
     ) -> int:
         horodatage = maintenant()
 
@@ -394,11 +402,14 @@ class Database:
             curseur = conn.execute(
                 """
                 INSERT INTO messages (conversation_id, role, content, reasoning,
-                                      model, provider, usage_json, duration_ms, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      model, provider, usage_json, duration_ms,
+                                      sources, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (conversation_id, role, content, reasoning, model, provider,
-                 json.dumps(usage) if usage else None, duration_ms, horodatage),
+                 json.dumps(usage) if usage else None, duration_ms,
+                 json.dumps(sources, ensure_ascii=False) if sources else None,
+                 horodatage),
             )
             # Le titre par défaut est remplacé par le début de la première
             # question : une liste de « Nouvelle conversation » est inutilisable.

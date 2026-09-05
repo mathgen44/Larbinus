@@ -356,3 +356,194 @@ def test_routes_documents(tmp_path):
 
         assert client.delete(f"/api/documents/{document['id']}").status_code == 204
         assert client.get("/api/documents").json()["documents"] == []
+
+
+# --------------------------------------------------------------------------- #
+#  Intégration au chat (phase 7b)
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def client_rag(tmp_path):
+    """Client complet : Ollama simulé, embeddings factices, un document indexé."""
+    import httpx
+
+    import app.main as principal
+    from app.config import Settings
+    from app.providers.registry import ProviderRegistry
+    from tests.conftest import ndjson, patch_provider
+
+    principal.settings.data_dir = str(tmp_path)
+    principal.settings.documents_dir = str(tmp_path / "documents")
+
+    with TestClient(app) as testeur:
+        app.state.rag.client = EmbeddingsFactices()
+        registry = ProviderRegistry(
+            Settings(_env_file=None, ollama_base_url="http://ollama.test:11434")
+        )
+        patch_provider(
+            registry.get("ollama"),
+            {
+                "/api/chat": httpx.Response(
+                    200,
+                    content=ndjson(
+                        {"message": {"content": "Le port est 8474 [1]."}, "done": False},
+                        {"done": True, "prompt_eval_count": 5, "eval_count": 6},
+                    ),
+                ),
+                "/api/tags": httpx.Response(200, json={"models": [{"name": "mistral"}]}),
+            },
+        )
+        app.state.registry = registry
+
+        testeur.post(
+            "/api/documents",
+            files={"files": ("reseau.md",
+                             b"# Pare-feu\n\nLe port 8474 doit etre ouvert pour Larbinus.\n",
+                             "text/markdown")},
+        )
+        yield testeur
+
+
+def test_chat_sans_rag_n_injecte_rien(client_rag):
+    conversation = client_rag.post("/api/conversations", json={}).json()
+    assert conversation["rag"] == 0
+
+    reponse = client_rag.post(
+        "/api/chat",
+        json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+              "messages": [{"role": "user", "content": "Quel port ouvrir ?"}],
+              "stream": False},
+    ).json()
+    assert "sources" not in reponse
+
+
+def test_chat_avec_rag_cite_ses_sources(client_rag):
+    conversation = client_rag.post("/api/conversations", json={"rag": True}).json()
+    assert conversation["rag"] == 1
+
+    reponse = client_rag.post(
+        "/api/chat",
+        json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+              "messages": [{"role": "user", "content": "Quel port ouvrir dans le pare-feu ?"}],
+              "stream": False},
+    ).json()
+
+    assert reponse["sources"][0]["filename"] == "reseau.md"
+    assert reponse["sources"][0]["numero"] == 1
+    assert "8474" in reponse["sources"][0]["extrait"]
+
+
+def test_les_extraits_arrivent_dans_le_prompt_systeme(client_rag):
+    """Vérifie ce que le modèle reçoit réellement, pas seulement la réponse."""
+    import json as _json
+
+    import httpx
+
+    from tests.conftest import ndjson
+
+    envoye = {}
+    provider = app.state.registry.get("ollama")
+    original = provider._client
+
+    def intercepte(request: httpx.Request) -> httpx.Response:
+        envoye.update(_json.loads(request.content))
+        return httpx.Response(
+            200, content=ndjson({"message": {"content": "ok"}, "done": False}, {"done": True})
+        )
+
+    conversation = client_rag.post("/api/conversations", json={"rag": True}).json()
+    provider._client = httpx.AsyncClient(transport=httpx.MockTransport(intercepte))
+    try:
+        client_rag.post(
+            "/api/chat",
+            json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+                  "messages": [{"role": "user", "content": "Quel port ouvrir dans le pare-feu ?"}],
+                  "stream": False},
+        )
+    finally:
+        provider._client = original
+
+    systeme = envoye["messages"][0]
+    assert systeme["role"] == "system"
+    assert "8474" in systeme["content"]
+    assert "[1]" in systeme["content"]
+
+
+def test_evenement_sources_avant_la_reponse(client_rag):
+    """L'utilisateur doit voir les sources pendant la rédaction, pas après."""
+    import json as _json
+
+    from tests.test_chat import parse_sse
+
+    conversation = client_rag.post("/api/conversations", json={"rag": True}).json()
+    reponse = client_rag.post(
+        "/api/chat",
+        json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+              "messages": [{"role": "user", "content": "Quel port ouvrir dans le pare-feu ?"}]},
+    )
+    evenements = parse_sse(reponse.text)
+    noms = [nom for nom, _ in evenements]
+    assert noms.index("sources") < noms.index("delta")
+
+    charge = _json.loads(next(d for nom, d in evenements if nom == "sources"))
+    assert charge["sources"][0]["filename"] == "reseau.md"
+
+
+def test_sources_conservees_avec_la_reponse(client_rag):
+    conversation = client_rag.post("/api/conversations", json={"rag": True}).json()
+    client_rag.post(
+        "/api/chat",
+        json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+              "messages": [{"role": "user", "content": "Quel port ouvrir dans le pare-feu ?"}],
+              "stream": False},
+    )
+    messages = client_rag.get(f"/api/conversations/{conversation['id']}").json()["messages"]
+    assert messages[1]["sources"][0]["filename"] == "reseau.md"
+
+
+def test_le_contexte_ne_pollue_pas_l_historique(client_rag):
+    """Les extraits valent pour un tour : ils ne doivent pas s'accumuler."""
+    conversation = client_rag.post("/api/conversations", json={"rag": True}).json()
+    for question in ["Quel port ouvrir ?", "Et pour le pare-feu ?"]:
+        client_rag.post(
+            "/api/chat",
+            json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+                  "messages": [{"role": "user", "content": question}], "stream": False},
+        )
+    messages = client_rag.get(f"/api/conversations/{conversation['id']}").json()["messages"]
+    assert all("Extraits des documents" not in m["content"] for m in messages)
+
+
+def test_le_champ_rag_de_la_requete_prime(client_rag):
+    """Une conversation sans RAG peut l'activer ponctuellement, et l'inverse."""
+    conversation = client_rag.post("/api/conversations", json={}).json()
+    reponse = client_rag.post(
+        "/api/chat",
+        json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+              "messages": [{"role": "user", "content": "Quel port ouvrir dans le pare-feu ?"}],
+              "rag": True, "stream": False},
+    ).json()
+    assert "sources" in reponse
+
+
+def test_index_en_panne_n_empeche_pas_de_repondre(client_rag):
+    """Une recherche impossible dégrade la réponse, elle ne la bloque pas."""
+    from app.rag.embeddings import EmbeddingIndisponible
+
+    class ClientEnPanne:
+        async def vectoriser(self, textes):
+            raise EmbeddingIndisponible("service arrêté")
+
+        async def aclose(self):
+            pass
+
+    app.state.rag.client = ClientEnPanne()
+    conversation = client_rag.post("/api/conversations", json={"rag": True}).json()
+    reponse = client_rag.post(
+        "/api/chat",
+        json={"model": "ollama/mistral", "conversation_id": conversation["id"],
+              "messages": [{"role": "user", "content": "Quel port ouvrir ?"}],
+              "stream": False},
+    )
+    assert reponse.status_code == 200
+    assert "sources" not in reponse.json()
+    assert reponse.json()["content"]

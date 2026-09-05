@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 7a terminée (socle RAG) → 7b (intégration au chat) |
+| **Phase en cours** | Phase 7 terminée (à valider en réel) → Phase 8 (sécurité, déploiement) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -282,13 +282,33 @@ Larbinus/
 - [x] 77 tests au vert, dont un qui rejoue la recherche **sans** `sqlite-vec`
       pour vérifier que le filet de sécurité donne les mêmes résultats
 
-### Phase 7b — Intégration au chat et interface
+### Phase 7b — Intégration au chat et interface ✅ *terminée (tests + navigateur)*
 
-- [ ] Injection du contexte dans la conversation quand le RAG est actif
-- [ ] Sources citées sous la réponse, avec extrait et provenance
-- [ ] Bascule « documents » par conversation
-- [ ] Écran de gestion : dépôt par glisser-déposer, liste, scan, suppression
-- [ ] **Vérification** : question dont la réponse n'existe que dans un document ingéré
+- [x] **Migration v4** : colonne `sources` sur `messages` — rouvrir une
+      conversation redonne les extraits d'origine, sans relancer une recherche
+      qui en produirait d'autres
+- [x] Le contexte est injecté dans le **prompt système du tour**, jamais dans
+      l'historique enregistré : les extraits ne s'accumulent pas d'un tour à l'autre
+- [x] Événement SSE `sources` émis **avant** la réponse : on voit sur quoi le
+      modèle s'appuie pendant qu'il rédige
+- [x] Bascule « Interroger mes documents » par conversation, avec le nombre de
+      documents indexés en regard ; désactivée si aucun service d'embeddings
+- [x] Le champ `rag` de la requête prime sur le réglage de la conversation :
+      activation ponctuelle possible depuis l'API
+- [x] Une recherche impossible (embeddings en panne, index incohérent) dégrade
+      la réponse au lieu de la bloquer — le modèle répond sans documents
+- [x] Sources affichées sous la réponse dans un bloc repliable : numéro,
+      fichier, section, page et extrait
+- [x] Écran « Documents » : glisser-déposer, liste avec état et fragments,
+      réindexation, suppression, bouton de scan du dossier surveillé
+- [x] 85 tests au vert, dont un qui vérifie **ce que le modèle reçoit
+      réellement** dans son prompt système, et non seulement ce qu'il répond
+- [x] **Vérification navigateur** : dépôt d'un fichier, scan du dossier,
+      activation de la bascule, question dont la réponse n'existe que dans les
+      documents, sources affichées avant la fin de la réponse, réglage et
+      sources retrouvés après rechargement — aucune erreur console
+- [ ] **Vérification en réel** : `ollama pull nomic-embed-text`, déposer un
+      document et poser une question dont la réponse n'est que dedans
 
 ### Phase 8 — Sécurité & mise en production homelab
 
@@ -427,3 +447,6 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Dimension et modèle d'embedding verrouillés à la première indexation | Des vecteurs produits par deux modèles différents ne sont pas comparables : mieux vaut refuser que renvoyer des résultats silencieusement faux |
 | 2026-09-05 | Une erreur d'extraction est enregistrée sur le document, jamais propagée | Un fichier illisible au milieu d'un dossier ne doit pas interrompre le traitement des autres |
 | 2026-09-05 | Déduplication par empreinte SHA-256 | Le même fichier déposé sous deux noms, ou présent à la fois dans le dossier et en dépôt manuel, ne doit pas être indexé deux fois |
+| 2026-09-05 | Le contexte documentaire va dans le prompt système du tour, pas dans l'historique | Sinon les extraits s'accumulent à chaque tour, gonflent le contexte et finissent par le saturer — critique avec 8 Go de VRAM |
+| 2026-09-05 | Les sources sont émises avant la réponse et enregistrées avec elle | Voir les sources pendant la rédaction permet de juger la réponse au fil de l'eau ; les enregistrer permet de les revoir sans relancer une recherche qui donnerait d'autres extraits |
+| 2026-09-05 | Une recherche documentaire en panne n'interrompt pas la conversation | Un service d'embeddings arrêté doit dégrader la réponse, pas empêcher de discuter |

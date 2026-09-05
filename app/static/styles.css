@@ -201,6 +201,11 @@ select {
   background: var(--fond); color: var(--texte); resize: vertical;
 }
 .ligne-temperature { grid-template-columns: auto auto 1fr; align-items: center; gap: 10px; }
+.ligne-bascule {
+  grid-template-columns: auto 1fr; align-items: center; gap: 8px;
+  cursor: pointer;
+}
+.ligne-bascule em { font-style: normal; opacity: .75; }
 .note { margin: 0; font-size: 12px; color: var(--texte-doux); }
 
 /* ------------------------------------------------------------------ fil -- */
@@ -470,4 +475,64 @@ code {
   .modale-corps { grid-template-columns: 1fr; }
   .modale-liste { border-right: none; border-bottom: 1px solid var(--bordure); max-height: 150px; }
   .ligne-deux { grid-template-columns: 1fr; }
+}
+
+
+/* --------------------------------------------------------- documents ----- */
+.documents-corps { display: block; padding: 14px; overflow-y: auto; }
+
+.depot {
+  padding: 22px 16px; text-align: center;
+  border: 2px dashed var(--bordure); border-radius: var(--rayon);
+  background: var(--fond-doux);
+  display: grid; gap: 8px; justify-items: center;
+}
+.depot.survol { border-color: var(--accent); background: var(--fond-eleve); }
+.depot p { margin: 0; }
+
+.documents-barre {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 14px 0 8px;
+}
+
+.documents-liste { display: flex; flex-direction: column; gap: 4px; }
+
+.document {
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--bordure);
+}
+.document-nom {
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.document-detail { font-size: 12px; color: var(--texte-doux); }
+.document-erreur { color: var(--erreur); font-size: 12px; }
+
+.pastille-statut {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--texte-doux);
+}
+.pastille-statut.indexe { background: #2ea043; }
+.pastille-statut.erreur { background: var(--erreur); }
+
+/* ---------------------------------------------------------- sources ------ */
+.sources {
+  margin-top: 10px; border: 1px solid var(--bordure); border-radius: 8px;
+  background: var(--fond-doux); font-size: .92em;
+}
+.sources > summary {
+  cursor: pointer; padding: 7px 12px; list-style: none;
+  color: var(--texte-doux); display: flex; align-items: center; gap: 8px;
+}
+.sources > summary::-webkit-details-marker { display: none; }
+.sources > summary::before { content: "▸"; }
+.sources[open] > summary::before { content: "▾"; }
+.sources .contenu { padding: 0 12px 10px; display: grid; gap: 8px; }
+
+.source { display: grid; gap: 2px; }
+.source-titre { font-size: 12px; color: var(--accent); }
+.source-extrait {
+  font-size: 12px; color: var(--texte-doux);
+  border-left: 2px solid var(--bordure); padding-left: 8px;
+  white-space: pre-wrap;
 }
