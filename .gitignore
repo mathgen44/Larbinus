@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Configuration locale / secrets
+.env
+.env.local
+
+# Données persistantes (SQLite, index RAG, uploads)
+data/
+*.db
+*.sqlite3
+
+# Outils / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
