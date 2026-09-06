@@ -170,6 +170,13 @@ async def chat(request: Request, body: ChatRequest):
 
     Le champ `model` prend la forme `fournisseur/modèle` (`ollama/mistral`).
     """
+    if not body.messages and not body.conversation_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Aucun message : `messages` ne peut être vide que si "
+                   "`conversation_id` est fourni.",
+        )
+
     registry: ProviderRegistry = request.app.state.registry
     provider = registry.resolve(body.model)
 

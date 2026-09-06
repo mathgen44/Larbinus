@@ -21,7 +21,12 @@ class ChatRequest(BaseModel):
         "Un identifiant sans préfixe utilise le fournisseur par défaut.",
         examples=["ollama/mistral"],
     )
-    messages: list[ChatMessage] = Field(..., min_length=1)
+    messages: list[ChatMessage] = Field(
+        default_factory=list,
+        description="Messages du tour. Peut être vide **si** `conversation_id` "
+        "est fourni : le serveur reprend alors la conversation là où elle en "
+        "est, ce qui sert à poursuivre après l'exécution confirmée d'un outil.",
+    )
     system: str | None = Field(
         default=None,
         description="Prompt système. Prioritaire sur un éventuel message de rôle `system`.",

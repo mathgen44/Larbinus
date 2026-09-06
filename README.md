@@ -183,6 +183,22 @@ Larbinus lit ces blocs et applique une règle simple :
   consultation qui enchaîne, redirige ou substitue. `df -h; rm -rf /` commence
   par une commande inoffensive : sans ce second contrôle, il partirait seul.
 
+### Les autres outils
+
+* **`fichier`** — lit un fichier ou liste un dossier parmi ceux auxquels le
+  conteneur a accès. Toujours en lecture, donc sans confirmation.
+* **`http`** — appelle l'API d'un service déclaré dans `HTTP_ALLOWED_HOSTS`.
+  Souvent préférable à SSH : une API refuse ce qu'elle n'expose pas, là où un
+  shell accepte tout. `GET` part seul, le reste attend votre accord.
+* **`web`** — recherche en ligne via une instance **SearXNG**. Aucune clé, et
+  aucune requête envoyée à un service tiers depuis Larbinus. SearXNG désactive
+  le format JSON par défaut : ajoutez `json` à `search.formats` dans son
+  `settings.yml`, sinon il répondra 403 — Larbinus vous le dira explicitement.
+
+Les outils s'activent **larbin par larbin** (formulaire du larbin) ou
+**conversation par conversation** (panneau des réglages). Aucun n'est actif par
+défaut, et un outil non configuré n'apparaît pas.
+
 ### Le vrai rempart est côté serveur
 
 Quoi que fasse Larbinus, ce qui délimite réellement ce qu'un modèle peut faire,

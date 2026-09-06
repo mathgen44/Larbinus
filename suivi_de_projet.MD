@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 10a terminée (moteur d'outils) → 10b (interface) |
+| **Phase en cours** | Phase 10 terminée (à valider en réel) → Phase 9 (qualité, documentation) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -428,15 +428,27 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 - [ ] **Vérification en réel** : créer le compte `larbinus` sur une machine,
       activer l'outil pour le larbin Homelab, demander l'état des conteneurs
 
-### Phase 10b — Interface des outils
+### Phase 10b — Interface des outils ✅ *terminée (tests + navigateur)*
 
-- [ ] Rendu des propositions avec bouton d'exécution et machine visée
-- [ ] Affichage des comptes rendus, distincts des messages de l'utilisateur
-- [ ] Activation des outils par larbin et par conversation
-- [ ] Outil `http` : appel d'API internes (Portainer, Proxmox, Zabbix)
-- [ ] Outil `web` : recherche en ligne
-- [ ] **Vérification** : parcours navigateur complet, proposition refusée puis
-      confirmée
+- [x] Outil `http` : liste blanche d'hôtes **port compris** (un service
+      autorisé sur 9000 ne l'est pas sur 22), redirections désactivées pour ne
+      pas sortir du périmètre, JSON réindenté, en-têtes par service
+- [x] Outil `web` : recherche via SearXNG ; le 403 caractéristique d'un format
+      JSON désactivé donne la marche à suivre au lieu d'un message opaque
+- [x] Cartes d'action dans la réponse : outil, commande, motif du classement,
+      et boutons « Exécuter » / « Ignorer » pour les seules actions d'écriture
+- [x] Le compte rendu se range **sous sa commande**, pas à la suite du fil
+- [x] Après confirmation, le modèle reprend la main seul : `messages` peut être
+      vide quand `conversation_id` est fourni, le serveur relisant l'historique
+- [x] Cases d'activation des outils dans les réglages et dans le formulaire du
+      larbin ; un larbin retenu applique les siens
+- [x] Comptes rendus et outils cochés restitués au rechargement
+- [x] 153 tests au vert
+- [x] **Vérification navigateur** : une consultation s'exécute seule, une
+      écriture attend, la confirmation l'exécute et relance le modèle, le tout
+      survit au rechargement — aucune erreur console
+- [ ] **Vérification en réel** : compte SSH dédié sur une machine, outil activé
+      pour le larbin Homelab, état des conteneurs demandé
 
 ## 5. Périmètre exclu (pour l'instant)
 
@@ -472,6 +484,9 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 9 | 2026-09-05 | 8 | Une requête rejetée en 429 repartait sans identifiant ni ligne de journal d'accès | Ordre des intergiciels inversé : dans Starlette le **dernier** ajouté est le plus extérieur, or la limitation de débit avait été ajoutée en dernier | `ContexteRequete` ajouté après `LimitationDebit`, donc au-dessus ; test dédié reproduisant l'ordre de `main.py` | Corrigé |
 | 10 | 2026-09-06 | 8 | CI en échec, `pytest` code de sortie 4, alors que la suite passe en local | Le script console `pytest` n'ajoute pas le répertoire courant au chemin d'import, contrairement à `python -m pytest` utilisé en local : `tests/conftest.py` ne trouvait pas le paquet `app`, et un échec d'import de conftest est traité comme une erreur d'usage (code 4) | `pyproject.toml` avec `pythonpath = ["."]`, et `python -m pytest` dans le workflow. Vérifié avec **les deux** formes d'invocation | Corrigé |
 | 11 | 2026-09-06 | 8 | `docker pull` refusé : `denied` sur `ghcr.io/mathgen44/larbinus` | Un paquet GHCR fraîchement publié est **privé par défaut**, même quand le dépôt est public | Rendre le paquet public dans ses réglages, ou `docker login ghcr.io` avec un jeton `read:packages`. Documenté dans le README | Clos |
+| 12 | 2026-09-06 | 10 | Le bloc d'action brut s'affichait comme un bloc de code dans la réponse | Le serveur retirait les blocs du contenu **enregistré**, mais le flux SSE transmet le texte tel quel : l'interface le rendait comme du Markdown | Filtre côté client, y compris sur un bloc en cours d'écriture — sinon la commande apparaîtrait caractère par caractère | Corrigé |
+| 13 | 2026-09-06 | 10 | Le résultat d'une consultation s'affichait après le texte du tour suivant | Le compte rendu était ajouté à la fin de la bulle, alors que la réponse continuait de s'y écrire | Le résultat est rattaché à la carte de l'action qui l'a produit, par correspondance de résumé | Corrigé |
+| 14 | 2026-09-06 | 4 | `app/static/app.js` était vu comme un fichier **binaire** par git et grep | Une constante de séparation avait été écrite avec un octet nul littéral au lieu d'un échappement — présent depuis la phase 4 | `const JETON = "\u0000"` : même valeur à l'exécution, fichier resté en texte pur | Corrigé |
 
 ### Points de vigilance observés en production
 
@@ -549,3 +564,7 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-06 | Les blocs d'action sont retirés du contenu enregistré | Réinjectés au tour suivant, ils feraient croire au modèle qu'il doit les reproduire — et la même commande repartirait indéfiniment |
 | 2026-09-06 | L'exécution confirmée revalide la proposition | L'utilisateur approuve une intention, pas un droit d'exécution arbitraire : machine hors inventaire et chemin hors périmètre restent refusés |
 | 2026-09-06 | Le vrai contrôle est documenté comme étant côté serveur | Un compte SSH dédié et un `sudoers` restreint pèsent plus que n'importe quelle précaution applicative |
+| 2026-09-06 | La liste blanche HTTP retient l'hôte **avec son port** | Autoriser une machine, c'est autoriser un service précis : le même hôte sur un autre port est un autre service |
+| 2026-09-06 | Les redirections HTTP ne sont pas suivies | Une redirection amènerait la requête hors de la liste blanche, sans nouveau contrôle |
+| 2026-09-06 | SearXNG plutôt qu'une API de recherche commerciale | Aucune clé à gérer, aucune requête envoyée à un tiers, et une instance existe déjà dans le homelab |
+| 2026-09-06 | `messages` peut être vide si `conversation_id` est fourni | C'est ce qui permet au modèle de reprendre après une action confirmée, sans qu'on lui fabrique un faux message d'utilisateur |

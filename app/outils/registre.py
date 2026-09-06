@@ -13,7 +13,9 @@ import logging
 from app.outils.analyse import extraire_blocs
 from app.outils.base import Niveau, Outil, Proposition, Resultat
 from app.outils.fichiers import OutilFichier
+from app.outils.http import OutilHTTP
 from app.outils.ssh import OutilSSH
+from app.outils.web import OutilWeb
 
 logger = logging.getLogger("larbinus.outils")
 
@@ -47,6 +49,18 @@ class RegistreOutils:
         if fichier.disponible:
             self._outils[fichier.nom] = fichier
 
+        http = OutilHTTP(settings)
+        if http.disponible:
+            self._outils[http.nom] = http
+        else:
+            logger.info("Outil http inactif : HTTP_ALLOWED_HOSTS n'est pas renseigné.")
+
+        web = OutilWeb(settings)
+        if web.disponible:
+            self._outils[web.nom] = web
+        else:
+            logger.info("Outil web inactif : WEB_SEARCH_URL n'est pas renseigné.")
+
     @property
     def noms(self) -> list[str]:
         return sorted(self._outils)
@@ -65,6 +79,8 @@ class RegistreOutils:
             }
             if isinstance(outil, OutilSSH):
                 entree["machines"] = sorted(m.nom for m in outil.machines.values())
+            if isinstance(outil, OutilHTTP):
+                entree["services"] = sorted(outil.hotes)
             catalogue.append(entree)
         return catalogue
 
@@ -85,6 +101,8 @@ class RegistreOutils:
             if isinstance(outil, OutilSSH):
                 machines = ", ".join(sorted(m.nom for m in outil.machines.values()))
                 details += f"\nMachines déclarées : {machines}."
+            if isinstance(outil, OutilHTTP):
+                details += f"\nServices autorisés : {', '.join(sorted(outil.hotes))}."
             descriptions.append(details)
         return CONSIGNE.format(outils="\n\n".join(descriptions))
 

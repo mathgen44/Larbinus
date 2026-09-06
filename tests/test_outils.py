@@ -394,3 +394,142 @@ def test_execution_confirmee_revalide(client_outils):
         "/api/outils/executer", json={"outil": "telepathie", "parametres": {}}
     )
     assert inconnu.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+#  Outil HTTP
+# --------------------------------------------------------------------------- #
+def reglages_http(tmp_path, **extra) -> Settings:
+    return Settings(
+        _env_file=None,
+        data_dir=str(tmp_path),
+        documents_dir=str(tmp_path / "documents"),
+        http_allowed_hosts="portainer.lan:9000,192.168.0.40:8080",
+        **extra,
+    )
+
+
+def test_hote_non_autorise_refuse(tmp_path):
+    registre = RegistreOutils(reglages_http(tmp_path))
+    proposition = registre.propositions(
+        "```larbinus:http\nurl: https://api.exemple.com/v1/tout\n```", ["http"]
+    )[0]
+    assert "non autorisé" in proposition.erreur
+
+
+def test_le_port_compte_dans_la_liste_blanche(tmp_path):
+    """Un service autorisé sur 9000 ne l'est pas sur 22."""
+    registre = RegistreOutils(reglages_http(tmp_path))
+    proposition = registre.propositions(
+        "```larbinus:http\nurl: http://portainer.lan:22/api\n```", ["http"]
+    )[0]
+    assert proposition.erreur is not None
+
+
+def test_get_est_automatique_mais_pas_post(tmp_path):
+    registre = RegistreOutils(reglages_http(tmp_path))
+
+    lecture = registre.propositions(
+        "```larbinus:http\nurl: http://portainer.lan:9000/api/endpoints\n```", ["http"]
+    )[0]
+    assert lecture.niveau is Niveau.LECTURE
+    assert registre.automatique(lecture) is True
+
+    ecriture = registre.propositions(
+        "```larbinus:http\nurl: http://portainer.lan:9000/api/stacks\n"
+        "methode: POST\ncorps: {}\n```",
+        ["http"],
+    )[0]
+    assert ecriture.niveau is Niveau.ECRITURE
+    assert registre.automatique(ecriture) is False
+
+
+def test_schema_non_http_refuse(tmp_path):
+    registre = RegistreOutils(reglages_http(tmp_path))
+    proposition = registre.propositions(
+        "```larbinus:http\nurl: file:///etc/passwd\n```", ["http"]
+    )[0]
+    assert proposition.erreur is not None
+
+
+async def test_execution_http_reindente_le_json(tmp_path):
+    registre = RegistreOutils(reglages_http(tmp_path))
+    outil = registre.get("http")
+    outil._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda requete: httpx.Response(
+                200, json={"nom": "larbinus", "etat": "running"}
+            )
+        )
+    )
+    proposition = registre.propositions(
+        "```larbinus:http\nurl: http://portainer.lan:9000/api/x\n```", ["http"]
+    )[0]
+    resultat = await registre.executer(proposition)
+    assert resultat.succes and resultat.code == 200
+    # Réindenté : une ligne unique de plusieurs milliers de caractères serait
+    # illisible pour le modèle comme pour l'utilisateur.
+    assert '"nom": "larbinus"' in resultat.sortie
+    assert "\n" in resultat.sortie
+    await outil.aclose()
+
+
+# --------------------------------------------------------------------------- #
+#  Outil web
+# --------------------------------------------------------------------------- #
+def reglages_web(tmp_path) -> Settings:
+    return Settings(
+        _env_file=None,
+        data_dir=str(tmp_path),
+        documents_dir=str(tmp_path / "documents"),
+        web_search_url="http://192.168.0.40:8080/search",
+    )
+
+
+async def test_recherche_web(tmp_path):
+    registre = RegistreOutils(reglages_web(tmp_path))
+    outil = registre.get("web")
+    outil._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda requete: httpx.Response(
+                200,
+                json={"results": [
+                    {"title": "Proxmox VE", "url": "https://pve.exemple",
+                     "content": "Derniere version stable."},
+                ]},
+            )
+        )
+    )
+    proposition = registre.propositions(
+        "```larbinus:web\nrequete: version de proxmox\n```", ["web"]
+    )[0]
+    assert registre.automatique(proposition) is True
+
+    resultat = await registre.executer(proposition)
+    assert "[1] Proxmox VE" in resultat.sortie
+    assert "https://pve.exemple" in resultat.sortie
+    await outil.aclose()
+
+
+async def test_searxng_sans_format_json_donne_la_marche_a_suivre(tmp_path):
+    """Le 403 de SearXNG est très reconnaissable : autant expliquer d'emblée."""
+    registre = RegistreOutils(reglages_web(tmp_path))
+    outil = registre.get("web")
+    outil._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda requete: httpx.Response(403, text=""))
+    )
+    proposition = registre.propositions(
+        "```larbinus:web\nrequete: test\n```", ["web"]
+    )[0]
+    resultat = await registre.executer(proposition)
+    assert resultat.succes is False
+    assert "settings.yml" in resultat.sortie
+    await outil.aclose()
+
+
+def test_outils_inactifs_sans_configuration(tmp_path):
+    registre = RegistreOutils(
+        Settings(_env_file=None, data_dir=str(tmp_path), documents_dir=str(tmp_path))
+    )
+    assert "http" not in registre.noms
+    assert "web" not in registre.noms

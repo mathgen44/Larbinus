@@ -84,6 +84,20 @@ class Settings(BaseSettings):
     ssh_timeout: float = 30.0
     ssh_connect_timeout: float = 5.0
 
+    #: Services joignables en HTTP, au format `hote[:port]`, séparés par des
+    #: virgules. Vide : l'outil http reste inactif.
+    http_allowed_hosts: str = ""
+    #: En-têtes par hôte, au format JSON :
+    #: {"portainer.lan:9443": {"X-API-Key": "..."}}
+    http_headers: str | None = None
+    http_timeout: float = 20.0
+
+    #: Point d'entrée d'une instance SearXNG exposant le format JSON.
+    #: Vide : l'outil web reste inactif.
+    web_search_url: str = ""
+    web_search_results: int = 5
+    web_search_timeout: float = 20.0
+
     #: Longueur maximale d'une sortie d'outil renvoyée au modèle. Au-delà, le
     #: début et la fin sont conservés : sur un journal, le milieu n'apprend rien.
     tool_output_limit: int = 6000

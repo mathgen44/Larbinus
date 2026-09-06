@@ -55,6 +55,10 @@
         <input type="checkbox" id="rag-actif">
         <span>Interroger mes documents <em id="rag-etat"></em></span>
       </label>
+      <fieldset class="outils-choix" id="outils-choix">
+        <legend>Outils autorisés</legend>
+        <div id="outils-liste"></div>
+      </fieldset>
       <p class="note">Le prompt système est enregistré avec la conversation en cours.</p>
     </section>
 
@@ -136,6 +140,10 @@
         <textarea id="persona-systeme" rows="5"
                   placeholder="Tu es… Réponds…"></textarea>
       </label>
+      <fieldset class="outils-choix" id="persona-outils-choix">
+        <legend>Outils autorisés</legend>
+        <div id="persona-outils"></div>
+      </fieldset>
       <div class="ligne-deux">
         <label>Modèle par défaut
           <select id="persona-modele"></select>
