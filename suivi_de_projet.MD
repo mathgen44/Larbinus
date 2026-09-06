@@ -341,12 +341,18 @@ Larbinus/
       démarrage de l'image publiée pour vérifier qu'elle répond sur `/health`**
 - [x] `docker-compose.ghcr.yml` pour déployer sans compiler sur le serveur
 - [x] README : portée de la clé, réglages de proxy, `proxy_buffering off`
-- [x] 101 tests au vert
+- [x] 101 tests au vert, vérifiés avec `pytest` **et** `python -m pytest` —
+      les deux invocations ne peuplent pas le chemin d'import de la même façon
 - [x] **Vérification sur serveur réel** : 5 appels passent puis 429 avec
       `Retry-After`, `/v1` refuse sans clé et accepte avec, `/api` reste
       ouverte, le rejet 429 porte bien un identifiant et une ligne de journal
 - [ ] **Vérification en réel** : premier `docker compose pull` depuis GHCR
       après la première poussée sur `main`
+
+> **Piège GHCR** : un paquet fraîchement publié est **privé par défaut**, même
+> si le dépôt est public — d'où un `denied` au premier `docker pull` anonyme.
+> Le rendre public dans les réglages du paquet, ou `docker login ghcr.io` avec
+> un jeton `read:packages`. Documenté dans le README.
 
 ### Phase 9 — Qualité & documentation
 
@@ -420,6 +426,8 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 7 | 2026-09-05 | 7 | Un document déposé dont l'indexation échoue ne pouvait pas être réessayé | Les octets du fichier n'étaient pas conservés : seul le dossier surveillé était relisible | Les fichiers déposés sont rangés sous `DATA_DIR/depots/<empreinte>` ; réindexation unitaire et bouton « Réessayer les échecs » ajoutés ; le fichier est supprimé avec le document | Corrigé |
 | 8 | 2026-09-05 | 7 | Deux tests de recherche échouaient une fois sur deux | Le double de test vectorisait avec `hash()`, randomisé à chaque processus : le classement des résultats variait d'une exécution à l'autre | Remplacé par `zlib.crc32`, déterministe ; suite relancée trois fois pour le vérifier | Corrigé |
 | 9 | 2026-09-05 | 8 | Une requête rejetée en 429 repartait sans identifiant ni ligne de journal d'accès | Ordre des intergiciels inversé : dans Starlette le **dernier** ajouté est le plus extérieur, or la limitation de débit avait été ajoutée en dernier | `ContexteRequete` ajouté après `LimitationDebit`, donc au-dessus ; test dédié reproduisant l'ordre de `main.py` | Corrigé |
+| 10 | 2026-09-06 | 8 | CI en échec, `pytest` code de sortie 4, alors que la suite passe en local | Le script console `pytest` n'ajoute pas le répertoire courant au chemin d'import, contrairement à `python -m pytest` utilisé en local : `tests/conftest.py` ne trouvait pas le paquet `app`, et un échec d'import de conftest est traité comme une erreur d'usage (code 4) | `pyproject.toml` avec `pythonpath = ["."]`, et `python -m pytest` dans le workflow. Vérifié avec **les deux** formes d'invocation | Corrigé |
+| 11 | 2026-09-06 | 8 | `docker pull` refusé : `denied` sur `ghcr.io/mathgen44/larbinus` | Un paquet GHCR fraîchement publié est **privé par défaut**, même quand le dépôt est public | Rendre le paquet public dans ses réglages, ou `docker login ghcr.io` avec un jeton `read:packages`. Documenté dans le README | Clos |
 
 ### Points de vigilance observés en production
 
@@ -489,3 +497,5 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Limitation de débit en mémoire, sans Redis | Un conteneur unique : le compteur repart à zéro au redémarrage, sans conséquence pour l'objectif visé |
 | 2026-09-05 | `X-Forwarded-For` n'est cru que d'un proxy déclaré | Un en-tête librement falsifiable transformerait la limitation en simple décoration |
 | 2026-09-05 | Le workflow GHCR démarre l'image publiée avant de la déclarer bonne | Une image qui se construit n'est pas une image qui fonctionne ; le `/health` le prouve |
+| 2026-09-06 | `pythonpath = ["."]` dans `pyproject.toml` **et** `python -m pytest` en CI | Deux verrous indépendants : le premier rend la suite lançable de n'importe quelle façon, le second garantit que la CI reproduit l'invocation locale |
+| 2026-09-06 | L'étiquette vérifiée par la CI est reprise de `metadata-action`, non recalculée | `git rev-parse --short` n'abrège pas toujours sur 7 caractères : l'étape aurait fini par chercher une image inexistante |

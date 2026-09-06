@@ -211,6 +211,16 @@ docker compose -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
+> **`denied` au premier `pull` ?** Les paquets GHCR sont **privés par défaut**,
+> même quand le dépôt est public. Rendez-le public dans
+> *Packages → larbinus → Package settings → Change visibility*, ou
+> authentifiez-vous sur la machine avec un jeton personnel disposant de la
+> portée `read:packages` :
+>
+> ```bash
+> echo 'VOTRE_JETON' | docker login ghcr.io -u VOTRE_COMPTE --password-stdin
+> ```
+
 ## Développement sans Docker
 
 ```bash

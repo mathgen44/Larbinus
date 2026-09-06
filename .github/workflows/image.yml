@@ -29,7 +29,11 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Lancer les tests
-        run: pytest -q
+        # `python -m pytest` plutôt que `pytest` : le module ajoute le
+        # répertoire courant au chemin d'import. La configuration de
+        # pyproject.toml le garantit aussi, mais deux verrous valent mieux
+        # qu'un pour la reproductibilité entre local et CI.
+        run: python -m pytest
         env:
           DATA_DIR: ./data
 
@@ -78,8 +82,14 @@ jobs:
 
       - name: Vérifier que l'image démarre
         run: |
+          # L'étiquette est reprise de la sortie de metadata-action plutôt que
+          # reconstruite à la main : recalculer « sha-$(git rev-parse --short) »
+          # suppose une longueur d'abréviation qui n'est pas garantie.
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Vérification de $IMAGE_TAG"
+
           docker run --rm -d --name larbinus-verif -p 8474:8080 \
-            -e DATA_DIR=/tmp/data ${{ env.REGISTRE }}/${{ env.IMAGE }}:sha-$(git rev-parse --short HEAD)
+            -e DATA_DIR=/tmp/data "$IMAGE_TAG"
           for tentative in $(seq 1 20); do
             if curl -sf http://localhost:8474/health > /dev/null; then
               echo "L'image répond sur /health"

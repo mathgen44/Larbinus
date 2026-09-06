@@ -1,0 +1,12 @@
+# Configuration de l'outillage. Larbinus n'est pas un paquet installable :
+# ce fichier ne sert qu'à régler pytest.
+
+[tool.pytest.ini_options]
+# Sans cette ligne, `pytest` (le script console) ne trouve pas le paquet `app` :
+# contrairement à `python -m pytest`, il n'ajoute pas le répertoire courant au
+# chemin d'import. Les tests passaient donc en local et échouaient en CI avec un
+# « ImportError while loading conftest » — code de sortie 4.
+pythonpath = ["."]
+
+testpaths = ["tests"]
+addopts = "-q"
