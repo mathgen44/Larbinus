@@ -6,7 +6,7 @@ import json
 import re
 import unicodedata
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response  # noqa: I001
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,7 @@ class ConversationCreation(BaseModel):
     system: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     rag: bool = Field(default=False, description="Interroger les documents indexés.")
+    tools: list[str] | None = Field(default=None, description="Outils activés.")
     persona_id: str | None = Field(
         default=None,
         description="Applique les réglages du persona à la conversation créée. "
@@ -40,6 +41,7 @@ class ConversationModification(BaseModel):
     system: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     rag: bool | None = None
+    tools: list[str] | None = None
 
 
 def base(request: Request) -> Database:
@@ -73,6 +75,7 @@ async def creer(request: Request, corps: ConversationCreation) -> dict:
     titre, modele, systeme, temperature = (
         corps.title, corps.model, corps.system, corps.temperature
     )
+    outils = json.dumps(corps.tools) if corps.tools is not None else None
     if corps.persona_id:
         persona = await db.persona(corps.persona_id)
         if persona is None:
@@ -84,10 +87,13 @@ async def creer(request: Request, corps: ConversationCreation) -> dict:
         modele = modele or persona["model"]
         systeme = systeme or persona["system"]
         temperature = temperature if temperature is not None else persona["temperature"]
+        if outils is None and persona.get("tools"):
+            outils = persona["tools"]
 
     return await db.creer_conversation(
         titre=titre, modele=modele, systeme=systeme,
         persona_id=corps.persona_id, temperature=temperature, rag=corps.rag,
+        tools=outils,
     )
 
 
@@ -109,6 +115,7 @@ async def modifier(
         identifiant, title=corps.title, model=corps.model,
         system=corps.system, temperature=corps.temperature,
         rag=None if corps.rag is None else int(corps.rag),
+        tools=None if corps.tools is None else json.dumps(corps.tools),
     )
 
 

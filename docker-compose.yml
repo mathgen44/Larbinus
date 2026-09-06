@@ -15,6 +15,10 @@ services:
       # Excel, HTML) et lancez un scan depuis l'interface. Peut pointer vers
       # un partage NFS ou Samba monté sur l'hôte.
       - ./documents:/documents
+      # Clé SSH des larbins, en lecture seule. Utilisez une clé DÉDIÉE, associée
+      # à un compte restreint sur les machines cibles : c'est elle, et non le
+      # code de Larbinus, qui délimite ce qu'un modèle peut réellement faire.
+      - ./ssh:/ssh:ro
     extra_hosts:
       # Permet d'atteindre un Ollama installé sur l'hôte via http://host.docker.internal:11434
       - "host.docker.internal:host-gateway"

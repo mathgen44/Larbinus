@@ -74,6 +74,24 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 150
     max_document_bytes: int = 25 * 1024 * 1024
 
+    # --- Outils ---
+    #: Inventaire des machines joignables en SSH, au format
+    #: `nom=utilisateur@hote[:port]`, séparées par des virgules.
+    #: Vide : l'outil ssh reste inactif.
+    ssh_hosts: str = ""
+    ssh_key_path: str | None = None
+    ssh_known_hosts: str | None = None
+    ssh_timeout: float = 30.0
+    ssh_connect_timeout: float = 5.0
+
+    #: Longueur maximale d'une sortie d'outil renvoyée au modèle. Au-delà, le
+    #: début et la fin sont conservés : sur un journal, le milieu n'apprend rien.
+    tool_output_limit: int = 6000
+
+    #: Nombre d'allers-retours automatiques avec le modèle après exécution d'un
+    #: outil. Un plafond bas évite qu'une boucle mal engagée ne parte seule.
+    tool_max_iterations: int = 3
+
     # --- Journalisation ---
     #: « texte » pour un journal lisible à l'œil, « json » pour un journal
     #: exploitable par un collecteur.

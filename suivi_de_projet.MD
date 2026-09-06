@@ -9,7 +9,7 @@
 | **Dépôt** | https://github.com/mathgen44/Larbinus |
 | **Dossier de travail** | `D:\GIT\Larbinus` |
 | **Machine de déploiement** | `192.168.0.40` — accès prévu sur `http://192.168.0.40:8474` |
-| **Phase en cours** | Phase 8 terminée (à valider en réel) → Phase 9 (qualité, documentation) |
+| **Phase en cours** | Phase 10a terminée (moteur d'outils) → 10b (interface) |
 | **Dernière mise à jour** | 2026-09-05 |
 
 **Règle de tenue du fichier** : à chaque étape, cocher les tâches terminées, mettre à jour
@@ -34,6 +34,9 @@ correction. Toute décision d'architecture qui change le cap va dans le § 8.
 | Ingestion | Dépôt dans l'interface **et** dossier surveillé monté dans le conteneur | 2026-09-05 |
 | Stockage vectoriel | SQLite + `sqlite-vec`, avec repli en Python | 2026-09-05 |
 | Portée de la clé d'API | `/v1` seulement ; l'interface reste libre sur le LAN (`LARBINUS_PROTECT_UI` pour tout fermer) | 2026-09-05 |
+| Outils des larbins | Consultation automatique, écriture sur confirmation | 2026-09-06 |
+| Protocole d'action | Blocs ` ```larbinus:<outil> ` proposés dans la réponse, plutôt que l'appel d'outils natif | 2026-09-06 |
+| Ressources visées | SSH sur machines déclarées, HTTP interne, recherche web, lecture de fichiers | 2026-09-06 |
 
 **Pourquoi Python/FastAPI** : écosystème IA le plus riche (SDK officiels des quatre
 fournisseurs, briques RAG matures), streaming SSE natif et simple, image finale légère
@@ -393,10 +396,51 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | `POST /v1/chat/completions` | Conversation au format OpenAI (n8n, Open WebUI, SDK) |
 | `GET /docs` | Documentation interactive générée |
 
+### Phase 10a — Moteur d'outils ✅ *terminée (validée par tests)*
+
+- [x] **Migration v5** : colonnes `tools` sur `personas` et `conversations`,
+      `kind` et `tool_json` sur `messages`
+- [x] Protocole de blocs ` ```larbinus:<outil> ` avec analyse tolérante :
+      clés accentuées, majuscules, guillemets superflus, bloc non refermé
+- [x] Découpage `clé: valeur` sur le **premier** deux-points — une commande
+      shell en contient souvent d'autres
+- [x] Classification lecture / écriture : liste blanche de commandes de
+      consultation, et **tout enchaînement (`;`, `&&`, `|`, `>`, `` ` ``,
+      `$(`) force la confirmation** — `df -h; rm -rf /` commence par une
+      commande inoffensive
+- [x] Outil `ssh` : inventaire `SSH_HOSTS`, le modèle ne peut viser aucune
+      autre machine ; `BatchMode=yes`, délais bornés, sortie tronquée en
+      gardant début et fin
+- [x] Outil `fichier` : lecture sous les répertoires autorisés, chemin résolu
+      **avant** contrôle pour neutraliser les `..`
+- [x] Boucle de conversation : une consultation s'exécute, son résultat repart
+      au modèle, il poursuit — plafonné par `TOOL_MAX_ITERATIONS`
+- [x] Les blocs sont retirés du contenu enregistré : les laisser amènerait le
+      modèle à les reproduire, et la même commande partirait en boucle
+- [x] Un compte rendu d'outil ne devient jamais le titre de la conversation
+- [x] `POST /api/outils/executer` **revalide** la proposition : confirmer une
+      action n'est pas signer un blanc-seing
+- [x] `openssh-client` ajouté à l'image ; clé montée en lecture seule
+- [x] README : création d'un compte SSH dédié, `sudoers` restreint, et
+      avertissement explicite sur la fiabilité des modèles de 7 à 8 milliards
+      de paramètres
+- [x] 145 tests au vert, dont 6 sur les seuls enchaînements shell
+- [ ] **Vérification en réel** : créer le compte `larbinus` sur une machine,
+      activer l'outil pour le larbin Homelab, demander l'état des conteneurs
+
+### Phase 10b — Interface des outils
+
+- [ ] Rendu des propositions avec bouton d'exécution et machine visée
+- [ ] Affichage des comptes rendus, distincts des messages de l'utilisateur
+- [ ] Activation des outils par larbin et par conversation
+- [ ] Outil `http` : appel d'API internes (Portainer, Proxmox, Zabbix)
+- [ ] Outil `web` : recherche en ligne
+- [ ] **Vérification** : parcours navigateur complet, proposition refusée puis
+      confirmée
+
 ## 5. Périmètre exclu (pour l'instant)
 
 - Multi-utilisateurs avec comptes et permissions
-- Appel d'outils / function calling
 - Entrées images ou audio
 - Interface mobile native
 
@@ -499,3 +543,9 @@ démarre et fonctionne même avec un seul fournisseur configuré.
 | 2026-09-05 | Le workflow GHCR démarre l'image publiée avant de la déclarer bonne | Une image qui se construit n'est pas une image qui fonctionne ; le `/health` le prouve |
 | 2026-09-06 | `pythonpath = ["."]` dans `pyproject.toml` **et** `python -m pytest` en CI | Deux verrous indépendants : le premier rend la suite lançable de n'importe quelle façon, le second garantit que la CI reproduit l'invocation locale |
 | 2026-09-06 | L'étiquette vérifiée par la CI est reprise de `metadata-action`, non recalculée | `git rev-parse --short` n'abrège pas toujours sur 7 caractères : l'étape aurait fini par chercher une image inexistante |
+| 2026-09-06 | Protocole de blocs plutôt qu'appel d'outils natif | `deepseek-r1` ne sait pas s'en servir et `mistral:7b` mal : un format que tout modèle sait produire vaut mieux qu'un format rigoureux que la moitié ignore |
+| 2026-09-06 | Tout enchaînement shell force la confirmation, même sur une commande listée | Sans cela, préfixer une commande destructrice d'un `df -h;` suffirait à la faire exécuter sans accord |
+| 2026-09-06 | L'inventaire `SSH_HOSTS` est la seule source de machines | Le modèle ne peut pas inventer une adresse ; il choisit dans une liste, il ne la compose pas |
+| 2026-09-06 | Les blocs d'action sont retirés du contenu enregistré | Réinjectés au tour suivant, ils feraient croire au modèle qu'il doit les reproduire — et la même commande repartirait indéfiniment |
+| 2026-09-06 | L'exécution confirmée revalide la proposition | L'utilisateur approuve une intention, pas un droit d'exécution arbitraire : machine hors inventaire et chemin hors périmètre restent refusés |
+| 2026-09-06 | Le vrai contrôle est documenté comme étant côté serveur | Un compte SSH dédié et un `sudoers` restreint pèsent plus que n'importe quelle précaution applicative |

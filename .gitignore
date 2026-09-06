@@ -14,6 +14,9 @@ data/
 # Dossier surveillé : le dossier est versionné, pas son contenu
 documents/*
 !documents/.gitkeep
+
+# Clés SSH des larbins : jamais dans le dépôt
+ssh/
 *.db
 *.sqlite3
 

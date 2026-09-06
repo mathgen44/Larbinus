@@ -161,6 +161,72 @@ Mise à jour ultérieure :
 cd /opt/larbinus && git pull && docker compose up -d --build
 ```
 
+## Outils des larbins
+
+Un larbin peut demander l'exécution d'actions : consulter une machine par SSH,
+lire un fichier accessible au conteneur. Il ne les exécute pas lui-même — il
+les **propose** dans sa réponse, sous forme d'un bloc :
+
+````
+```larbinus:ssh
+hote: beast
+commande: docker ps
+```
+````
+
+Larbinus lit ces blocs et applique une règle simple :
+
+* une **commande de consultation** (`docker ps`, `systemctl status`,
+  `journalctl`, `df`…) s'exécute seule, son résultat est transmis au modèle, et
+  il poursuit son raisonnement ;
+* **tout le reste attend votre accord** — y compris une commande de
+  consultation qui enchaîne, redirige ou substitue. `df -h; rm -rf /` commence
+  par une commande inoffensive : sans ce second contrôle, il partirait seul.
+
+### Le vrai rempart est côté serveur
+
+Quoi que fasse Larbinus, ce qui délimite réellement ce qu'un modèle peut faire,
+c'est ce que l'utilisateur SSH a le droit de faire. Créez un **compte dédié**
+sur les machines cibles :
+
+```bash
+# Sur la machine cible
+sudo adduser --disabled-password --gecos "" larbinus
+sudo mkdir -p /home/larbinus/.ssh
+sudo tee /home/larbinus/.ssh/authorized_keys < votre_cle.pub
+sudo chown -R larbinus: /home/larbinus/.ssh
+sudo chmod 700 /home/larbinus/.ssh && sudo chmod 600 /home/larbinus/.ssh/authorized_keys
+
+# Puis, si des commandes privilégiées sont nécessaires, une liste explicite :
+echo 'larbinus ALL=(ALL) NOPASSWD: /usr/bin/systemctl status *, /usr/bin/docker ps' \
+  | sudo tee /etc/sudoers.d/larbinus
+```
+
+Sur la machine qui héberge Larbinus, générez une clé **dédiée** — jamais votre
+clé personnelle :
+
+```bash
+mkdir -p ssh && ssh-keygen -t ed25519 -N "" -f ssh/id_ed25519 -C larbinus
+ssh-keyscan -H 192.168.0.139 >> ssh/known_hosts
+sudo chown -R 1000:1000 ssh && chmod 600 ssh/id_ed25519
+```
+
+Puis déclarez les machines dans `.env` :
+
+```ini
+SSH_HOSTS=beast=larbinus@192.168.0.139,vm=larbinus@192.168.0.40
+SSH_KEY_PATH=/ssh/id_ed25519
+```
+
+Un larbin ne peut viser que les machines de cette liste. Les outils s'activent
+larbin par larbin, ou conversation par conversation : aucun n'est actif par
+défaut.
+
+> **Un mot d'honnêteté sur les modèles locaux.** `mistral:7b` et
+> `deepseek-r1:8b` se trompent de nom de conteneur, confondent deux machines,
+> et n'ont aucune notion du caractère irréversible d'une commande. La
+> confirmation n'est pas une formalité : lisez ce qu'ils proposent.
+
 ## Sécurité et exploitation
 
 **Clé d'API.** `LARBINUS_API_KEY` protège les routes `/v1` — celles qu'appellent

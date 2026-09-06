@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.middleware import ContexteRequete, JournalJson, LimitationDebit
+from app.outils.registre import RegistreOutils
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
 from app.rag.depot import DepotDocuments
@@ -21,6 +22,7 @@ from app.routers import chat as chat_router
 from app.routers import conversations as conversations_router
 from app.routers import documents as documents_router
 from app.routers import models as models_router
+from app.routers import outils as outils_router
 from app.routers import personas as personas_router
 from app.routers import openai as openai_router
 from app.storage.db import Database
@@ -49,8 +51,14 @@ logger = logging.getLogger("larbinus")
 async def lifespan(app: FastAPI):
     os.makedirs(settings.data_dir, exist_ok=True)
 
+    app.state.settings = settings
     registry = ProviderRegistry(settings)
     app.state.registry = registry
+
+    outils = RegistreOutils(settings)
+    app.state.outils = outils
+    if outils.noms:
+        logger.info("Outils disponibles : %s", ", ".join(outils.noms))
 
     db = Database(Path(settings.data_dir) / "larbinus.db")
     await db.connect()
@@ -94,6 +102,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await registry.aclose()
+        await outils.aclose()
         await rag.aclose()
         await db.close()
         logger.info("Arrêt de %s", settings.app_name)
@@ -192,4 +201,5 @@ app.include_router(chat_router.router)     # /api/chat
 app.include_router(conversations_router.router)  # /api/conversations
 app.include_router(personas_router.router)       # /api/personas
 app.include_router(documents_router.router)      # /api/documents
+app.include_router(outils_router.router)         # /api/outils
 app.include_router(openai_router.router)   # /v1/chat/completions, /v1/models

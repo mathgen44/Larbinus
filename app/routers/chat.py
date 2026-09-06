@@ -1,10 +1,9 @@
 """API de conversation native de Larbinus.
 
 `POST /api/chat` renvoie soit un flux SSE (`stream: true`, défaut), soit une
-réponse JSON complète. Le flux porte cinq types d'événements : `delta`
-(réponse visible), `reasoning` (monologue interne des modèles de raisonnement),
-`sources` (extraits de documents retenus, émis avant la réponse), `done` et
-`error`.
+réponse JSON complète. Le flux porte les événements `delta` (réponse visible),
+`reasoning` (monologue interne), `sources` (extraits de documents), `outils`
+(actions proposées), `outil` (résultat d'une exécution), `done` et `error`.
 
 Deux modes de conversation coexistent :
 
@@ -12,20 +11,29 @@ Deux modes de conversation coexistent :
   rien n'est enregistré. C'est le mode d'un script ou d'un appel ponctuel.
 * **avec `conversation_id`** — la base est la source de vérité : le serveur
   relit l'historique enregistré, y ajoute le nouveau message, puis enregistre
-  la question et la réponse. Le client n'envoie plus que le message du tour, ce
-  qui interdit toute divergence entre son état et celui du serveur.
+  la question et la réponse.
+
+Quand des outils sont activés, un tour de conversation peut en enchaîner
+plusieurs : le modèle propose une action, Larbinus l'exécute si elle est de
+consultation, lui transmet le résultat, et il poursuit. Les actions qui
+modifient quelque chose interrompent la boucle et attendent l'accord explicite
+de l'utilisateur.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.outils.analyse import retirer_blocs
+from app.outils.base import Proposition
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
 from app.rag.depot import IndexIncoherent
@@ -40,15 +48,29 @@ logger = logging.getLogger("larbinus.chat")
 router = APIRouter(prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key_ui)])
 
 
-async def _documents_actifs(request: Request, body: ChatRequest, conversation: dict | None) -> bool:
+@dataclass
+class Contexte:
+    """Tout ce qui a été décidé avant d'interroger le modèle."""
+
+    requete: ChatRequest
+    sources: list[dict]
+    outils_actifs: list[str]
+
+
+def _outils_demandes(body: ChatRequest, conversation: dict | None) -> list[str]:
     """La requête tranche ; sinon on suit le réglage de la conversation."""
-    if body.rag is not None:
-        return body.rag
-    return bool(conversation and conversation.get("rag"))
+    if body.tools is not None:
+        return body.tools
+    if conversation and conversation.get("tools"):
+        try:
+            return json.loads(conversation["tools"])
+        except json.JSONDecodeError:
+            logger.warning("Liste d'outils illisible sur %s", conversation["id"])
+    return []
 
 
-async def _preparer(request: Request, body: ChatRequest) -> tuple[ChatRequest, list[dict]]:
-    """Reconstitue la requête complète : historique, prompt système, documents."""
+async def _preparer(request: Request, body: ChatRequest) -> Contexte:
+    """Reconstitue la requête : historique, prompt système, documents, outils."""
     conversation = None
     messages = list(body.messages)
     systeme = body.system
@@ -62,50 +84,48 @@ async def _preparer(request: Request, body: ChatRequest) -> tuple[ChatRequest, l
 
         historique = await db.historique(body.conversation_id)
         messages = [ChatMessage(**m) for m in historique] + messages
-        # Le prompt système et la température de la conversation s'appliquent
-        # si la requête n'en fournit pas pour ce tour précis — c'est ainsi
-        # qu'un persona continue d'agir sans que le client ait à le renvoyer.
         systeme = systeme or conversation.get("system")
         if temperature is None:
             temperature = conversation.get("temperature")
 
     sources: list[dict] = []
-    if await _documents_actifs(request, body, conversation):
-        sources = await _injecter_documents(request, body, messages)
-        if sources:
-            contexte = request.state.contexte_rag
-            # Le contexte est placé dans le prompt système plutôt que dans un
-            # message : il concerne ce tour-ci, et n'a pas à polluer
-            # l'historique enregistré des tours suivants.
+    if body.rag if body.rag is not None else bool(conversation and conversation.get("rag")):
+        sources, contexte = await _chercher_documents(request, body, messages)
+        if contexte:
+            # Placé dans le prompt système et non dans un message : cela vaut
+            # pour ce tour, et n'a pas à polluer l'historique enregistré.
             systeme = f"{systeme}\n\n{contexte}" if systeme else contexte
 
-    complet = body.model_copy(
-        update={"messages": messages, "system": systeme, "temperature": temperature}
+    registre = request.app.state.outils
+    actifs = registre.actifs(_outils_demandes(body, conversation))
+    if actifs:
+        consigne = registre.consigne(actifs)
+        systeme = f"{systeme}\n\n{consigne}" if systeme else consigne
+
+    return Contexte(
+        requete=body.model_copy(
+            update={"messages": messages, "system": systeme, "temperature": temperature}
+        ),
+        sources=sources,
+        outils_actifs=actifs,
     )
-    return complet, sources
 
 
-async def _injecter_documents(
+async def _chercher_documents(
     request: Request, body: ChatRequest, messages: list[ChatMessage]
-) -> list[dict]:
-    """Cherche les extraits pertinents pour la dernière question posée."""
+) -> tuple[list[dict], str]:
     rag = request.app.state.rag
     if not rag.disponible:
-        return []
+        return [], ""
 
-    question = next(
-        (m.content for m in reversed(messages) if m.role == "user"), ""
-    )
+    question = next((m.content for m in reversed(messages) if m.role == "user"), "")
     try:
         contexte, sources = await rag.contexte(question, limite=body.rag_top_k)
     except (EmbeddingIndisponible, IndexIncoherent) as exc:
-        # Un index en panne ne doit pas empêcher de converser : on répond sans
-        # documents et on le dit dans les logs.
+        # Un index en panne ne doit pas empêcher de converser.
         logger.warning("Recherche documentaire indisponible : %s", exc)
-        return []
-
-    request.state.contexte_rag = contexte
-    return sources
+        return [], ""
+    return sources, contexte
 
 
 async def _enregistrer_question(request: Request, body: ChatRequest) -> None:
@@ -118,30 +138,30 @@ async def _enregistrer_question(request: Request, body: ChatRequest) -> None:
 
 
 async def _enregistrer_reponse(
-    request: Request,
-    body: ChatRequest,
-    provider,
-    contenu: str,
-    raisonnement: str,
-    usage: dict,
-    duree_ms: int,
-    sources: list[dict],
+    request: Request, body: ChatRequest, provider, contenu: str, raisonnement: str,
+    usage: dict, duree_ms: int, sources: list[dict], propositions: list[Proposition],
 ) -> None:
-    if not body.conversation_id or not (contenu or raisonnement):
+    if not body.conversation_id or not (contenu or raisonnement or propositions):
         return
     db: Database = request.app.state.db
     await db.ajouter_message(
-        body.conversation_id,
-        "assistant",
-        contenu,
+        body.conversation_id, "assistant", contenu,
         reasoning=raisonnement or None,
-        model=body.model,
-        provider=provider.name,
-        usage=usage,
-        duration_ms=duree_ms,
-        sources=sources or None,
+        model=body.model, provider=provider.name,
+        usage=usage, duration_ms=duree_ms, sources=sources or None,
+        tool={"propositions": [p.to_dict() for p in propositions]} if propositions else None,
     )
     await db.modifier_conversation(body.conversation_id, model=body.model)
+
+
+async def _enregistrer_outil(request: Request, body: ChatRequest, resultat) -> None:
+    if not body.conversation_id:
+        return
+    db: Database = request.app.state.db
+    await db.ajouter_message(
+        body.conversation_id, "user", resultat.pour_le_modele(),
+        kind="outil", tool=resultat.to_dict(),
+    )
 
 
 @router.post("/chat")
@@ -149,48 +169,80 @@ async def chat(request: Request, body: ChatRequest):
     """Conversation avec le modèle demandé.
 
     Le champ `model` prend la forme `fournisseur/modèle` (`ollama/mistral`).
-    Sans préfixe, `DEFAULT_PROVIDER` s'applique — ou l'unique fournisseur
-    configuré s'il n'y en a qu'un.
     """
     registry: ProviderRegistry = request.app.state.registry
     provider = registry.resolve(body.model)
 
-    complet, sources = await _preparer(request, body)
+    contexte = await _preparer(request, body)
     await _enregistrer_question(request, body)
 
     if not body.stream:
-        return await _complete(request, body, complet, provider, sources)
+        return await _complete(request, body, contexte, provider)
 
     return StreamingResponse(
-        _event_stream(request, body, complet, provider, sources),
+        _event_stream(request, body, contexte, provider),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
 
 
-async def _complete(
-    request: Request, body: ChatRequest, complet: ChatRequest, provider, sources: list[dict]
-) -> JSONResponse:
-    """Mode non-streaming : on consomme le flux et on renvoie le tout d'un bloc."""
-    started = time.perf_counter()
+async def _un_tour(provider, requete: ChatRequest, messages: list[ChatMessage]):
+    """Un aller-retour avec le modèle, sans streaming."""
     parts: list[str] = []
-    reasoning_parts: list[str] = []
-    finish_reason, usage = "stop", {}
+    raisonnement: list[str] = []
+    usage: dict = {}
+    finish = "stop"
 
-    async for chunk in provider.stream_chat(complet):
+    async for chunk in provider.stream_chat(requete.model_copy(update={"messages": messages})):
         parts.append(chunk.delta)
-        reasoning_parts.append(chunk.reasoning)
+        raisonnement.append(chunk.reasoning)
         if chunk.done:
-            finish_reason = chunk.finish_reason or "stop"
             usage = chunk.usage
+            finish = chunk.finish_reason or "stop"
+    return "".join(parts), "".join(raisonnement), usage, finish
 
-    contenu = "".join(parts)
-    reasoning = "".join(reasoning_parts)
-    duree = round((time.perf_counter() - started) * 1000)
 
-    await _enregistrer_reponse(
-        request, body, provider, contenu, reasoning, usage, duree, sources
-    )
+async def _complete(
+    request: Request, body: ChatRequest, contexte: Contexte, provider
+) -> JSONResponse:
+    """Mode non-streaming, boucle d'outils comprise."""
+    registre = request.app.state.outils
+    started = time.perf_counter()
+    messages = list(contexte.requete.messages)
+
+    contenu = raisonnement = ""
+    usage: dict = {}
+    finish = "stop"
+    executions: list[dict] = []
+    en_attente: list[dict] = []
+
+    for iteration in range(request.app.state.settings.tool_max_iterations + 1):
+        contenu, raisonnement, usage, finish = await _un_tour(
+            provider, contexte.requete, messages
+        )
+        propositions = registre.propositions(contenu, contexte.outils_actifs)
+        propre = retirer_blocs(contenu) if propositions else contenu
+
+        await _enregistrer_reponse(
+            request, body, provider, propre, raisonnement, usage,
+            round((time.perf_counter() - started) * 1000),
+            contexte.sources if iteration == 0 else [], propositions,
+        )
+        contenu = propre
+        if not propositions:
+            break
+
+        automatiques = [p for p in propositions if registre.automatique(p)]
+        en_attente = [p.to_dict() for p in propositions if not registre.automatique(p)]
+        if not automatiques or iteration == request.app.state.settings.tool_max_iterations:
+            break
+
+        messages = messages + [ChatMessage(role="assistant", content=propre)]
+        for proposition in automatiques:
+            resultat = await registre.executer(proposition)
+            executions.append(resultat.to_dict())
+            await _enregistrer_outil(request, body, resultat)
+            messages.append(ChatMessage(role="user", content=resultat.pour_le_modele()))
 
     return JSONResponse(
         {
@@ -198,61 +250,117 @@ async def _complete(
             "provider": provider.name,
             "conversation_id": body.conversation_id,
             "content": contenu,
-            # Absent pour un modèle classique, plutôt qu'une chaîne vide :
-            # le client sait ainsi distinguer « pas de raisonnement » de « vide ».
-            **({"reasoning": reasoning} if reasoning else {}),
-            **({"sources": sources} if sources else {}),
-            "finish_reason": finish_reason,
+            **({"reasoning": raisonnement} if raisonnement else {}),
+            **({"sources": contexte.sources} if contexte.sources else {}),
+            **({"outils": executions} if executions else {}),
+            **({"confirmations": en_attente} if en_attente else {}),
+            "finish_reason": finish,
             "usage": usage,
-            "duration_ms": duree,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
         }
     )
 
 
 async def _event_stream(
-    request: Request, body: ChatRequest, complet: ChatRequest, provider, sources: list[dict]
+    request: Request, body: ChatRequest, contexte: Contexte, provider
 ) -> AsyncIterator[str]:
-    """Flux SSE. Une erreur de fournisseur devient un événement `error`.
+    """Flux SSE, boucle d'outils comprise.
 
-    Les en-têtes sont déjà partis quand elle survient : impossible de renvoyer
-    un code HTTP d'erreur, il faut donc l'annoncer dans le flux lui-même.
+    Une erreur survenue après le début du flux devient un événement `error` :
+    les en-têtes sont déjà partis, impossible de renvoyer un code HTTP.
     """
+    registre = request.app.state.outils
+    plafond = request.app.state.settings.tool_max_iterations
     started = time.perf_counter()
+    messages = list(contexte.requete.messages)
+
     parts: list[str] = []
-    reasoning_parts: list[str] = []
+    raisonnement: list[str] = []
     usage: dict = {}
     interrompu = False
+    propositions: list[Proposition] = []
 
     try:
-        # Les sources partent avant la réponse : l'utilisateur voit sur quoi le
-        # modèle s'appuie pendant qu'il rédige, et non après coup.
-        if sources:
-            yield sse_event({"sources": sources}, event="sources")
+        if contexte.sources:
+            yield sse_event({"sources": contexte.sources}, event="sources")
 
-        async for chunk in provider.stream_chat(complet):
-            if await request.is_disconnected():
-                logger.info("Client déconnecté, arrêt du flux (%s)", body.model)
-                interrompu = True
+        for iteration in range(plafond + 1):
+            tour: list[str] = []
+            tour_raisonnement: list[str] = []
+
+            async for chunk in provider.stream_chat(
+                contexte.requete.model_copy(update={"messages": messages})
+            ):
+                if await request.is_disconnected():
+                    logger.info("Client déconnecté, arrêt du flux (%s)", body.model)
+                    interrompu = True
+                    break
+                if chunk.reasoning:
+                    tour_raisonnement.append(chunk.reasoning)
+                    yield sse_event({"reasoning": chunk.reasoning}, event="reasoning")
+                if chunk.delta:
+                    tour.append(chunk.delta)
+                    yield sse_event({"delta": chunk.delta}, event="delta")
+                if chunk.done:
+                    usage = chunk.usage
+
+            texte = "".join(tour)
+            raisonnement.append("".join(tour_raisonnement))
+            if interrompu:
+                parts.append(texte)
                 break
-            if chunk.reasoning:
-                reasoning_parts.append(chunk.reasoning)
-                yield sse_event({"reasoning": chunk.reasoning}, event="reasoning")
-            if chunk.delta:
-                parts.append(chunk.delta)
-                yield sse_event({"delta": chunk.delta}, event="delta")
-            if chunk.done:
-                usage = chunk.usage
+
+            propositions = registre.propositions(texte, contexte.outils_actifs)
+            propre = retirer_blocs(texte) if propositions else texte
+            parts.append(propre)
+
+            await _enregistrer_reponse(
+                request, body, provider, propre, "".join(tour_raisonnement), usage,
+                round((time.perf_counter() - started) * 1000),
+                contexte.sources if iteration == 0 else [], propositions,
+            )
+
+            if not propositions:
+                break
+
+            yield sse_event(
+                {"propositions": [p.to_dict() for p in propositions]}, event="outils"
+            )
+
+            automatiques = [p for p in propositions if registre.automatique(p)]
+            if not automatiques:
+                # Rien ne part seul : la main revient à l'utilisateur.
+                break
+            if iteration == plafond:
                 yield sse_event(
                     {
-                        "model": body.model,
-                        "provider": provider.name,
-                        "conversation_id": body.conversation_id,
-                        "finish_reason": chunk.finish_reason or "stop",
-                        "usage": chunk.usage,
-                        "duration_ms": round((time.perf_counter() - started) * 1000),
+                        "message": f"Plafond de {plafond} enchaînements atteint : "
+                                   "les actions suivantes attendent votre accord.",
                     },
-                    event="done",
+                    event="plafond",
                 )
+                break
+
+            messages = messages + [ChatMessage(role="assistant", content=propre)]
+            for proposition in automatiques:
+                resultat = await registre.executer(proposition)
+                yield sse_event({"resultat": resultat.to_dict()}, event="outil")
+                await _enregistrer_outil(request, body, resultat)
+                messages.append(
+                    ChatMessage(role="user", content=resultat.pour_le_modele())
+                )
+
+        yield sse_event(
+            {
+                "model": body.model,
+                "provider": provider.name,
+                "conversation_id": body.conversation_id,
+                "finish_reason": "stop",
+                "usage": usage,
+                "duration_ms": round((time.perf_counter() - started) * 1000),
+            },
+            event="done",
+        )
     except ProviderError as exc:
         logger.warning("Erreur pendant le flux : %s", exc)
         yield sse_event(exc.to_dict(), event="error")
@@ -261,17 +369,10 @@ async def _event_stream(
         interrompu = True
         raise
     finally:
-        # Une génération interrompue reste utile : on garde ce qui a été reçu
-        # plutôt que de perdre le tour.
-        await _enregistrer_reponse(
-            request,
-            body,
-            provider,
-            "".join(parts),
-            "".join(reasoning_parts),
-            usage,
-            round((time.perf_counter() - started) * 1000),
-            sources,
-        )
-        if interrompu:
-            logger.info("Réponse partielle enregistrée (%s)", body.conversation_id)
+        if interrompu and body.conversation_id and parts:
+            # Une génération interrompue reste utile : on garde ce qui a été
+            # reçu plutôt que de perdre le tour.
+            await _enregistrer_reponse(
+                request, body, provider, parts[-1], raisonnement[-1] if raisonnement else "",
+                usage, round((time.perf_counter() - started) * 1000), [], [],
+            )

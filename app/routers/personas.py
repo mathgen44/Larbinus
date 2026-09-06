@@ -9,6 +9,8 @@ consigne.
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
@@ -29,6 +31,7 @@ class PersonaCreation(BaseModel):
     model: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     icon: str | None = Field(default=None, max_length=8)
+    tools: list[str] | None = Field(default=None, description="Outils activés.")
 
 
 class PersonaModification(BaseModel):
@@ -38,6 +41,7 @@ class PersonaModification(BaseModel):
     model: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     icon: str | None = Field(default=None, max_length=8)
+    tools: list[str] | None = Field(default=None, description="Outils activés.")
 
 
 def base(request: Request) -> Database:
@@ -58,7 +62,9 @@ async def lister(request: Request) -> list[dict]:
 
 @router.post("", status_code=201)
 async def creer(request: Request, corps: PersonaCreation) -> dict:
-    return await base(request).creer_persona(**corps.model_dump())
+    champs = corps.model_dump()
+    champs["tools"] = json.dumps(champs["tools"]) if champs["tools"] is not None else None
+    return await base(request).creer_persona(**champs)
 
 
 @router.get("/{identifiant}")
@@ -72,7 +78,9 @@ async def modifier(
 ) -> dict:
     db = base(request)
     await _ou_404(db, identifiant)
-    return await db.modifier_persona(identifiant, **corps.model_dump())
+    champs = corps.model_dump()
+    champs["tools"] = json.dumps(champs["tools"]) if champs["tools"] is not None else None
+    return await db.modifier_persona(identifiant, **champs)
 
 
 @router.delete("/{identifiant}", status_code=204, response_class=Response)

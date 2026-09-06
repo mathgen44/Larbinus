@@ -38,6 +38,11 @@ class ChatRequest(BaseModel):
         default=None, ge=1, le=20,
         description="Nombre d'extraits injectés ; défaut RAG_TOP_K.",
     )
+    tools: list[str] | None = Field(
+        default=None,
+        description="Outils autorisés pour ce tour. Laissé vide, c'est le "
+        "réglage de la conversation qui s'applique.",
+    )
     conversation_id: str | None = Field(
         default=None,
         description="Si fourni, la base devient la source de vérité : le serveur "

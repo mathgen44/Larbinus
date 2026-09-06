@@ -20,6 +20,12 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     DATA_DIR=/data
 
+# Client SSH : nécessaire à l'outil « ssh » des larbins. Sans lui, l'outil
+# n'échoue qu'au moment de son premier usage, ce qui est le pire des moments.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssh-client \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
 
 # Utilisateur non privilégié

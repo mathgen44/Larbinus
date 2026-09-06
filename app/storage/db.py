@@ -22,7 +22,7 @@ from pathlib import Path
 
 logger = logging.getLogger("larbinus.db")
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -122,6 +122,15 @@ MIGRATIONS: dict[int, list[str]] = {
         # conversation doit permettre de revoir sur quoi le modèle s'est
         # appuyé, sans relancer une recherche qui donnerait d'autres extraits.
         "ALTER TABLE messages ADD COLUMN sources TEXT",
+    ],
+    5: [
+        # Outils activés, par larbin et par conversation (liste JSON de noms).
+        "ALTER TABLE personas ADD COLUMN tools TEXT",
+        "ALTER TABLE conversations ADD COLUMN tools TEXT",
+        # Distingue un message ordinaire d'un compte rendu d'outil, pour que
+        # l'interface ne les présente pas comme des propos de l'utilisateur.
+        "ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'normal'",
+        "ALTER TABLE messages ADD COLUMN tool_json TEXT",
     ],
 }
 
@@ -291,6 +300,7 @@ class Database:
             message = dict(ligne)
             message["usage"] = json.loads(message.pop("usage_json") or "{}")
             message["sources"] = json.loads(message.get("sources") or "[]")
+            message["tool"] = json.loads(message.pop("tool_json", None) or "null")
             messages.append(message)
         return messages
 
@@ -329,6 +339,7 @@ class Database:
         persona_id: str | None = None,
         temperature: float | None = None,
         rag: bool = False,
+        tools: str | None = None,
     ) -> dict:
         identifiant = uuid.uuid4().hex
         horodatage = maintenant()
@@ -337,11 +348,12 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO conversations (id, title, model, system, persona_id,
-                                           temperature, rag, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                           temperature, rag, tools,
+                                           created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (identifiant, titre or TITRE_PAR_DEFAUT, modele, systeme,
-                 persona_id, temperature, int(rag), horodatage, horodatage),
+                 persona_id, temperature, int(rag), tools, horodatage, horodatage),
             )
 
         await self._ecrire(action)
@@ -353,13 +365,14 @@ class Database:
             "persona_id": persona_id,
             "temperature": temperature,
             "rag": int(rag),
+            "tools": tools,
             "created_at": horodatage,
             "updated_at": horodatage,
             "message_count": 0,
         }
 
     async def modifier_conversation(self, identifiant: str, **champs) -> dict | None:
-        autorises = {"title", "model", "system", "temperature", "rag"}
+        autorises = {"title", "model", "system", "temperature", "rag", "tools"}
         mises_a_jour = {k: v for k, v in champs.items() if k in autorises and v is not None}
         if not mises_a_jour:
             return await self.conversation(identifiant)
@@ -395,6 +408,8 @@ class Database:
         usage: dict | None = None,
         duration_ms: int | None = None,
         sources: list[dict] | None = None,
+        kind: str = "normal",
+        tool: dict | None = None,
     ) -> int:
         horodatage = maintenant()
 
@@ -403,17 +418,20 @@ class Database:
                 """
                 INSERT INTO messages (conversation_id, role, content, reasoning,
                                       model, provider, usage_json, duration_ms,
-                                      sources, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      sources, kind, tool_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (conversation_id, role, content, reasoning, model, provider,
                  json.dumps(usage) if usage else None, duration_ms,
                  json.dumps(sources, ensure_ascii=False) if sources else None,
+                 kind, json.dumps(tool, ensure_ascii=False) if tool else None,
                  horodatage),
             )
             # Le titre par défaut est remplacé par le début de la première
             # question : une liste de « Nouvelle conversation » est inutilisable.
-            if role == "user":
+            # Un compte rendu d'outil n'est pas une question : il ne doit
+            # jamais devenir le titre de la conversation.
+            if role == "user" and kind == "normal":
                 conn.execute(
                     "UPDATE conversations SET title = ? WHERE id = ? AND title = ?",
                     (titre_depuis(content), conversation_id, TITRE_PAR_DEFAUT),
@@ -446,6 +464,7 @@ class Database:
             champs.get("model"),
             champs.get("temperature"),
             champs.get("icon"),
+            champs.get("tools"),
             horodatage,
             horodatage,
         )
@@ -454,8 +473,8 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO personas (id, name, description, system, model,
-                                      temperature, icon, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      temperature, icon, tools, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 valeurs,
             )
@@ -464,7 +483,8 @@ class Database:
         return await self.persona(identifiant)
 
     async def modifier_persona(self, identifiant: str, **champs) -> dict | None:
-        autorises = {"name", "description", "system", "model", "temperature", "icon"}
+        autorises = {"name", "description", "system", "model", "temperature",
+                     "icon", "tools"}
         # `is not None` seulement : une description vidée volontairement doit
         # pouvoir être enregistrée, d'où l'usage d'une chaîne vide côté client.
         mises_a_jour = {k: v for k, v in champs.items() if k in autorises and v is not None}
